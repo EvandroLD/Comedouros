@@ -234,7 +234,7 @@ def api_reiniciar():
     return jsonify(ok=True)
 
 
-HTML = """
+HTML = r"""
 <!doctype html>
 <html lang="pt-BR">
 <head>
