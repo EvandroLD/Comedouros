@@ -52,7 +52,6 @@ def _carregar_tag_info():
 
 TAG_INFO = _carregar_tag_info()
 
-<<<<<<< Updated upstream
 BOT_TOKEN = os.environ.get(
     "TELEGRAM_BOT_TOKEN",
     "COLE_SEU_TOKEN_DO_BOT_AQUI",
@@ -61,13 +60,6 @@ CHAT_ID = os.environ.get(
     "TELEGRAM_CHAT_ID",
     "COLE_SEU_CHAT_ID_AQUI",
 ).strip()
-=======
-
-#CONFERIR SE ESSAS INFORMAÇÕES BATEM 
-BOT_TOKEN = os.environ.get("8130076024:AAH3WOv1xJAT5ylbZRuGJmMMlkb3b2Exf18", "")
-CHAT_ID = os.environ.get("-1002684732798", "")
-##PRECISO DE UM LOG_FILE_PATH????????##
->>>>>>> Stashed changes
 
 
 def _resolver_log_path():

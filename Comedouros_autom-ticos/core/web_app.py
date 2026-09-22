@@ -11,6 +11,7 @@ from collections import deque
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template_string, request
+from werkzeug.exceptions import HTTPException
 import RPi.GPIO as GPIO
 
 import balanca as bl
@@ -19,6 +20,17 @@ from config import BALANCAS, TAG_INFO_CSV
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
+
+
+@app.errorhandler(Exception)
+def tratar_erro_como_json(erro):
+    #Sem isso, qualquer excecao (ex: pigpio desconectado) vira uma pagina HTML de
+    #erro do Flask; o front-end faz `await r.json()` nela, a promise quebra sem
+    #aviso nenhum, e o botao parece simplesmente "nao funcionar".
+    if isinstance(erro, HTTPException):
+        return erro
+    logging.exception("Erro nao tratado em uma rota da API")
+    return jsonify(ok=False, erro=str(erro)), 500
 
 
 #O QUE É THREADING.RLOCK?
@@ -150,7 +162,12 @@ def api_motor(numero):
     dados = request.get_json(silent=True) or {}
     direcao = dados.get("direcao", "horario")
     velocidade = int(dados.get("velocidade", 150))
-    motor._definir_estado_manual(numero, direcao, velocidade)
+    try:
+        with HARDWARE_LOCK:
+            motor._definir_estado_manual(numero, direcao, velocidade)
+    except Exception as erro:
+        registrar_status(f"Erro ao ligar motor {numero}: {erro}")
+        return jsonify(ok=False, erro=str(erro)), 500
     registrar_status(f"Motor {numero} ligado ({direcao}, {velocidade})")
     return jsonify(ok=True)
 
@@ -159,8 +176,13 @@ def api_motor(numero):
 def api_parar_motor(numero):
     if numero not in (1, 2):
         return jsonify(ok=False, erro="Motor invalido"), 400
-    motor._definir_estado_manual(numero, "parado", 0)
-    motor._liberar_controle_manual(numero)
+    try:
+        with HARDWARE_LOCK:
+            motor._definir_estado_manual(numero, "parado", 0)
+            motor._liberar_controle_manual(numero)
+    except Exception as erro:
+        registrar_status(f"Erro ao parar motor {numero}: {erro}")
+        return jsonify(ok=False, erro=str(erro)), 500
     registrar_status(f"Motor {numero} parado")
     return jsonify(ok=True)
 
@@ -172,35 +194,43 @@ def api_ovelha():
     if any(not str(dados.get(campo, "")).strip() for campo in obrigatorios):
         return jsonify(ok=False, erro="Informe tag, nome e peso"), 400
 
-    caminho = caminho_tag_info()
-    with HARDWARE_LOCK:
-        with caminho.open("r", encoding="utf-8", newline="") as arquivo:
-            registros = list(csv.DictReader(arquivo))
-            campos = ["tag_id", "tipo", "valor", "nome", "peso", "mestra"]
-        tag_id = str(dados["tag_id"]).strip().upper()
-        if any(registro.get("tag_id", "").strip().upper() == tag_id for registro in registros):
-            return jsonify(ok=False, erro="Essa tag ja esta cadastrada"), 409
-        peso = float(dados["peso"])
-        registros.append({
-            "tag_id": tag_id,
-            "tipo": "percentual",
-            "valor": peso * 0.2,
-            "nome": str(dados["nome"]).strip(),
-            "peso": peso,
-            "mestra": "False",
-        })
-        with caminho.open("w", encoding="utf-8", newline="") as arquivo:
-            escritor = csv.DictWriter(arquivo, fieldnames=campos)
-            escritor.writeheader()
-            escritor.writerows(registros)
+    try:
+        caminho = caminho_tag_info()
+        with HARDWARE_LOCK:
+            with caminho.open("r", encoding="utf-8", newline="") as arquivo:
+                registros = list(csv.DictReader(arquivo))
+                campos = ["tag_id", "tipo", "valor", "nome", "peso", "mestra"]
+            tag_id = str(dados["tag_id"]).strip().upper()
+            if any(registro.get("tag_id", "").strip().upper() == tag_id for registro in registros):
+                return jsonify(ok=False, erro="Essa tag ja esta cadastrada"), 409
+            peso = float(dados["peso"])
+            registros.append({
+                "tag_id": tag_id,
+                "tipo": "percentual",
+                "valor": peso * 0.2,
+                "nome": str(dados["nome"]).strip(),
+                "peso": peso,
+                "mestra": "False",
+            })
+            with caminho.open("w", encoding="utf-8", newline="") as arquivo:
+                escritor = csv.DictWriter(arquivo, fieldnames=campos)
+                escritor.writeheader()
+                escritor.writerows(registros)
+    except Exception as erro:
+        registrar_status(f"Erro ao cadastrar ovelha: {erro}")
+        return jsonify(ok=False, erro=str(erro)), 500
     registrar_status(f"Ovelha cadastrada: {dados['nome']}")
     return jsonify(ok=True)
 
 
 @app.post("/api/reiniciar")
 def api_reiniciar():
+    try:
+        subprocess.Popen(["sudo", "reboot", "0"])
+    except Exception as erro:
+        registrar_status(f"Erro ao solicitar reinicio: {erro}")
+        return jsonify(ok=False, erro=str(erro)), 500
     registrar_status("Reinicio solicitado")
-    subprocess.Popen(["sudo", "reboot", "0"])
     return jsonify(ok=True)
 
 

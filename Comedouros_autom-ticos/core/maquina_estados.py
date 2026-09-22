@@ -117,139 +117,112 @@ class SistemaCocho:
                 if tag: #se achou o rfid
                     print(f"tag lida: {tag}")
 
-<<<<<<< Updated upstream
                     if tag in self.tag_info['tag_id'].values: #vê se a tag ta no .csv
-=======
-		    #TAG FANTASMA 
-                    if tag == '0E8A3000E2801191A50400721456F326':
-                        print(f"TAG FANTASMA FOI LIDA")
-                        ####EU DUVIDO QUE ISSO FUNCIONA PARA IGNORAR A TAG, MAS EU DUVIDO!!!!!!!!!!!!!!!!######
-                        continue
+                        nome_animal = self.tag_info.loc[
+                            self.tag_info['tag_id'] == tag, 'nome'
+                        ].values[0]
 
-                    else:
-                        
-                        print(f"tag lida: {tag}")
-
-
-                        #CONFERIR SE ISSSO FUNCIONA !!!!!!!!!!!!!!!!!!!!!!!!!
-                        if tag in self.tag_info['tag_id'].values: #vê se a tag ta no .csv
-                            nome_animal = self.tag_info.loc[
-                                self.tag_info['tag_id'] == tag, 'nome'
-                            ].values[0]
->>>>>>> Stashed changes
-
-                            if verificar_intervalo_alimentacao(tag, LOCAL_RELATORIO_CSV):
-                                print(
-                                    f"Tag {tag} bloqueada: já se alimentou "
-                                    "nas últimas 24 horas."
-                                )
-                                nt.notificar_bloqueio_alimentacao(tag)
-                                sr.aguardar_sensor_livre('1')
-
-                                saida = time.ctime()
-                                segundos_no_cocho = time.monotonic() - inicio
-                                minutos = int(segundos_no_cocho // 60)
-                                segundos = int(segundos_no_cocho % 60)
-                                #CONFERIR SE ISSSO FUNCIONA !!!!!!!!!!!!!!!!!!!!!!!!!
-                                return {
-                                    'tag_id': tag,
-                                    'nome': nome_animal,
-                                    'hora_entrada': entrada,
-                                    'hora_saida': saida,
-                                    'tempo_cocho': (
-                                        f"{minutos}m {segundos:02d}s"
-                                        if minutos != 0 or segundos != 0 else 0
-                                    ),
-                                    'peso_animal': 0,
-                                    'peso_racao': -2
-                                }
-
-                            ##TELEGRAM  ALERTA
-                            nt.notificar_subida_animal(tag)
-
-<<<<<<< Updated upstream
-                            peso_racao = pd.to_numeric(
-                                self.tag_info.loc[
-                                    self.tag_info['tag_id'] == tag, 'valor'
-                                ].values[0],
-                                errors='coerce',
-                            )  # pega o peso da ração no .csv
-                            if pd.isna(peso_racao) or peso_racao <= 0:
-                                print(
-                                    f"Valor de racao invalido para a tag {tag}; "
-                                    "ciclo cancelado."
-                                )
-                                sr.aguardar_sensor_livre('1')
-                                return None
-                            nome_animal = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'nome'].values[0]
-=======
-                            peso_racao = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'valor'].values[0] #pega o peso da ração no .csv
->>>>>>> Stashed changes
-                            peso_animal_anterior = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'peso'].values[0]
-                            tipo_racao = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'tipo'].values[0]
-                                
-                            print(f"tag encontrada, a vaquinha {nome_animal} vai comer {peso_racao}kg de ração hoje!")
-
-                        # if tipo_racao == 'percentual' and not pd.isna(peso_animal):
-                                #altera peso_racao para ser a porcentagem do animal
-                        # elif tipo_racao == 'percentual':
-                                #coloca peso como valor fixo padrao
-
-                            #começa a rodar o motor e ler balanca 3. ALIMENTAÇÃO (Motor/Balança)
-                            while True:
-                                self.logar_pesos_reais()
-
-                                if not sr.confirmar_presenca_sensor('1'):
-                                    motor._definir_estado_normal(1, "parado", 0)
-                                    if not self._aguardar_retorno_animal():
-                                        break
-
-                                peso1, _ = bl.ler_peso(1)
-                                if peso1 is not None:
-                                    self.peso_racao_buffer.append(peso1)
-
-                                if len(self.peso_racao_buffer) > 10:
-                                    self.peso_racao_buffer.pop(0)
-                                    print(f'lendo peso despejado {peso_racao_despejada}')
-                                    if (peso_racao_despejada:= np.median(self.peso_racao_buffer)) > peso_racao:
-                                        print(f'{peso_racao_despejada} > {peso_racao}')
-                                        break
-                                if (peso_racao_despejada > (0.7*peso_racao)):
-                                    print(f'{peso_racao_despejada} > 0.7* {peso_racao}')
-                                    motor._definir_estado_normal(1,"horario", 80)
-                                else:
-                                    motor._definir_estado_normal(1,"horario", 150)
-
-
-                            motor._definir_estado_normal(1, "parado", 0)
-
-                            motor._definir_estado_normal(2, "horario", 255)
-
-                            for _ in range(10):
-                                self.logar_pesos_reais()
-                                peso2,_ = bl.ler_peso(2)
-                                if peso2 is not None:
-                                    peso_animal_buffer.append(peso2)
-
-                            if len(peso_animal_buffer) >= 3:
-                                peso_animal_atual = np.median(peso_animal_buffer)
-                                if pd.notna(peso_animal_anterior) and abs(peso_animal_atual - peso_animal_anterior) / peso_animal_anterior > 0.20:
-                                    print(f'peso medido {peso_animal_atual:.1f} desviou >20% de {peso_animal_anterior:.1f}, descartando')
-                                    peso_animal_atual = -1
-                            else:
-                                print('poucas leituras validas da balanca 2, usando peso anterior')
-                                peso_animal_atual = -1
-
-                            time.sleep(7)
-                            motor._definir_estado_normal(2, "parado", 0)
-
+                        if verificar_intervalo_alimentacao(tag, LOCAL_RELATORIO_CSV):
+                            print(
+                                f"Tag {tag} bloqueada: já se alimentou "
+                                "nas últimas 24 horas."
+                            )
+                            nt.notificar_bloqueio_alimentacao(tag)
                             sr.aguardar_sensor_livre('1')
+
                             saida = time.ctime()
-                            fim = time.monotonic()
-                            segundos_no_cocho = fim - inicio
+                            segundos_no_cocho = time.monotonic() - inicio
                             minutos = int(segundos_no_cocho // 60)
                             segundos = int(segundos_no_cocho % 60)
-                            break
+                            return {
+                                'tag_id': tag,
+                                'nome': nome_animal,
+                                'hora_entrada': entrada,
+                                'hora_saida': saida,
+                                'tempo_cocho': (
+                                    f"{minutos}m {segundos:02d}s"
+                                    if minutos != 0 or segundos != 0 else 0
+                                ),
+                                'peso_animal': 0,
+                                'peso_racao': -2
+                            }
+
+                        ##TELEGRAM  ALERTA
+                        nt.notificar_subida_animal(tag)
+
+                        peso_racao = pd.to_numeric(
+                            self.tag_info.loc[
+                                self.tag_info['tag_id'] == tag, 'valor'
+                            ].values[0],
+                            errors='coerce',
+                        )  # pega o peso da ração no .csv
+                        if pd.isna(peso_racao) or peso_racao <= 0:
+                            print(
+                                f"Valor de racao invalido para a tag {tag}; "
+                                "ciclo cancelado."
+                            )
+                            sr.aguardar_sensor_livre('1')
+                            return None
+                        peso_animal_anterior = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'peso'].values[0]
+                        tipo_racao = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'tipo'].values[0]
+
+                        print(f"tag encontrada, a vaquinha {nome_animal} vai comer {peso_racao}kg de ração hoje!")
+
+                        #começa a rodar o motor e ler balanca 3. ALIMENTAÇÃO (Motor/Balança)
+                        while True:
+                            self.logar_pesos_reais()
+
+                            if not sr.confirmar_presenca_sensor('1'):
+                                motor._definir_estado_normal(1, "parado", 0)
+                                if not self._aguardar_retorno_animal():
+                                    break
+
+                            peso1, _ = bl.ler_peso(1)
+                            if peso1 is not None:
+                                self.peso_racao_buffer.append(peso1)
+
+                            if len(self.peso_racao_buffer) > 10:
+                                self.peso_racao_buffer.pop(0)
+                                print(f'lendo peso despejado {peso_racao_despejada}')
+                                if (peso_racao_despejada:= np.median(self.peso_racao_buffer)) > peso_racao:
+                                    print(f'{peso_racao_despejada} > {peso_racao}')
+                                    break
+                            if (peso_racao_despejada > (0.7*peso_racao)):
+                                print(f'{peso_racao_despejada} > 0.7* {peso_racao}')
+                                motor._definir_estado_normal(1,"horario", 80)
+                            else:
+                                motor._definir_estado_normal(1,"horario", 150)
+
+
+                        motor._definir_estado_normal(1, "parado", 0)
+
+                        motor._definir_estado_normal(2, "horario", 255)
+
+                        for _ in range(10):
+                            self.logar_pesos_reais()
+                            peso2,_ = bl.ler_peso(2)
+                            if peso2 is not None:
+                                peso_animal_buffer.append(peso2)
+
+                        if len(peso_animal_buffer) >= 3:
+                            peso_animal_atual = np.median(peso_animal_buffer)
+                            if pd.notna(peso_animal_anterior) and abs(peso_animal_atual - peso_animal_anterior) / peso_animal_anterior > 0.20:
+                                print(f'peso medido {peso_animal_atual:.1f} desviou >20% de {peso_animal_anterior:.1f}, descartando')
+                                peso_animal_atual = -1
+                        else:
+                            print('poucas leituras validas da balanca 2, usando peso anterior')
+                            peso_animal_atual = -1
+
+                        time.sleep(7)
+                        motor._definir_estado_normal(2, "parado", 0)
+
+                        sr.aguardar_sensor_livre('1')
+                        saida = time.ctime()
+                        fim = time.monotonic()
+                        segundos_no_cocho = fim - inicio
+                        minutos = int(segundos_no_cocho // 60)
+                        segundos = int(segundos_no_cocho % 60)
+                        break
 
                     elif tag:
                         print(

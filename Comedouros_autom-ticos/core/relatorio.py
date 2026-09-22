@@ -53,11 +53,17 @@ def _normalizar_campo(coluna, valor):
 #RECEBE OS DADOS COMO DICIONARIO, CRIA O CABECALHO E
 
 
+def _planilha_esta_vazia(planilha):
+    #row_count é o tamanho da grade (ex: 1000), nunca 0, mesmo com a planilha vazia.
+    #por isso é preciso checar as celulas realmente preenchidas.
+    return len(planilha.get_all_values()) == 0
+
+
 def salvar_registro_em_sheets(dados_do_registro: dict):
     try:
         planilha = _autenticar_e_abrir_planilha()
 
-        if planilha.row_count == 0:
+        if _planilha_esta_vazia(planilha):
             cabecalho = list(dados_do_registro.keys())
             planilha.append_row(cabecalho, value_input_option="USER_ENTERED")
 
@@ -128,7 +134,7 @@ def sincronizar_csv_com_sheets():
                 registros_faltantes.append(linha.to_dict())
 
 
-        if planilha.row_count == 0:
+        if _planilha_esta_vazia(planilha):
             planilha.append_row(colunas, value_input_option="USER_ENTERED")
 
         enviados = 0
