@@ -1,6 +1,3 @@
-###NAO SEI COMO FUNCIONA, TEM QUE TESTAR!!!!!!!!!!!!!!!!!!!!!!!!!!!###
-
-
 import csv
 import logging
 import os
@@ -10,7 +7,7 @@ import time
 from collections import deque
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 import RPi.GPIO as GPIO
 
@@ -33,7 +30,6 @@ def tratar_erro_como_json(erro):
     return jsonify(ok=False, erro=str(erro)), 500
 
 
-#O QUE É THREADING.RLOCK?
 HARDWARE_LOCK = threading.RLock()
 STATUS_LOCK = threading.Lock()
 STATUS = {
@@ -44,7 +40,6 @@ STATUS = {
     "motor2": "parado",
 }
 
-#O QUE ISSO FAZ?
 LOGS = deque(maxlen=100)
 CALIBRACAO_B2_PENDENTE = False
 
@@ -74,7 +69,6 @@ def atualizar_pesos():
     except Exception as erro:
         registrar_status(f"Erro ao ler balancas: {erro}")
 
-#PRA QUE ISSO?
 def estado_motor(numero):
     direcao, velocidade = motor._obter_estado_ativo(numero)
     return "parado" if velocidade <= 0 else f"{direcao} ({velocidade})"
@@ -89,8 +83,6 @@ def status_atual():
         resultado["logs"] = list(LOGS)
         return resultado
 
-
-#MUDAR APENAS PARA UMA FUNÇÃO
 
 def calibrar_balanca_1():
     try:
@@ -116,8 +108,6 @@ def iniciar_calibracao_2():
 def api_status():
     return jsonify(status_atual())
 
-
-#MUDAR PARA APENAS UMA FUNÇÃO
 
 @app.post("/api/calibrar/1")
 def api_calibrar_1():
@@ -234,39 +224,9 @@ def api_reiniciar():
     return jsonify(ok=True)
 
 
-HTML = r"""
-<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Controle do Cocho</title>
-<style>
-body{font-family:Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px;background:#f3f5f7;color:#17202a}
-section{background:white;padding:18px;margin:14px 0;border-radius:8px;box-shadow:0 2px 8px #0001}button{padding:10px 14px;margin:4px;border:0;border-radius:5px;background:#1769aa;color:white;cursor:pointer}button.stop{background:#b42318}button.danger{background:#7a160f}input{padding:10px;margin:4px;width:150px}#pesos{font-size:1.4rem;font-weight:bold}#logs{height:150px;overflow:auto;background:#111;color:#b9f6ca;padding:10px;white-space:pre-wrap}
-</style></head><body>
-<h1>Controle do Cocho</h1>
-<section><h2>Pesos</h2><div id="pesos">Carregando...</div></section>
-<section><h2>Balanças</h2><button onclick="post('/api/calibrar/1')">Calibrar balança 1</button><br>
-<input id="pesoCalibracao" type="number" step="0.01" placeholder="Peso conhecido (kg)"><button onclick="calibrar2()">Calibrar balança 2</button></section>
-<section><h2>Motores</h2><button onclick="motor(1)">Girar motor 1</button><button class="stop" onclick="parar(1)">Parar motor 1</button><br><button onclick="motor(2)">Girar motor 2</button><button class="stop" onclick="parar(2)">Parar motor 2</button></section>
-<section><h2>Cadastrar ovelha</h2><input id="tag" placeholder="Tag"><input id="nome" placeholder="Nome"><input id="peso" type="number" step="0.01" placeholder="Peso kg"><button onclick="cadastrar()">Cadastrar</button></section>
-<section><h2>Situação</h2><div id="situacao"></div><pre id="logs"></pre></section>
-<button class="danger" onclick="reiniciar()">Reiniciar Raspberry Pi</button>
-<script>
-async function post(url,data={}){let r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});let j=await r.json();if(!r.ok) alert(j.erro||'Erro');return j}
-function motor(n){post('/api/motor/'+n)} function parar(n){post('/api/motor/'+n+'/parar')}
-async function calibrar2(){let peso=Number(document.getElementById('pesoCalibracao').value);if(!peso)return alert('Informe o peso conhecido');let j=await post('/api/calibrar/2',{peso});if(j.mensagem)alert(j.mensagem)}
-function cadastrar(){post('/api/ovelha',{tag_id:tag.value,nome:nome.value,peso:peso.value}).then(j=>{if(j.ok)alert('Ovelha cadastrada')})}
-function reiniciar(){if(confirm('Reiniciar a Raspberry Pi?'))post('/api/reiniciar')}
-async function atualizar(){let j=await fetch('/api/status').then(r=>r.json());pesos.textContent=`Balança 1: ${j.peso1??'erro'} kg | Balança 2: ${j.peso2??'erro'} kg`;situacao.textContent=`${j.mensagem}\nMotor 1: ${j.motor1}\nMotor 2: ${j.motor2}`;logs.textContent=j.logs.join('\n')}
-setInterval(atualizar,1000);atualizar();
-</script></body></html>
-"""
-
-
 @app.get("/")
 def pagina():
-    return render_template_string(HTML)
+    return render_template("index.html")
 
 
 if __name__ == "__main__":
@@ -280,5 +240,4 @@ if __name__ == "__main__":
     except Exception as erro:
         registrar_status(f"Hardware ainda nao inicializado: {erro}")
 
-    #CONFERIR ESSA PORTA
     app.run(host="0.0.0.0", port=5000)
