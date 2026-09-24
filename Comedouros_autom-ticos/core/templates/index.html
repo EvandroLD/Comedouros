@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Controle do Cocho</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Controle do Cocho</h1>
+
+    <section>
+        <h2>Pesos</h2>
+        <div id="pesos">Carregando...</div>
+    </section>
+
+    <section>
+        <h2>Balanças</h2>
+        <button onclick="post('/api/calibrar/1')">Calibrar balança 1</button>
+        <br>
+        <input id="pesoCalibracao" type="number" step="0.01" placeholder="Peso conhecido (kg)">
+        <button onclick="calibrar2()">Calibrar balança 2</button>
+    </section>
+
+    <section>
+        <h2>Motores</h2>
+        <button onclick="motor(1)">Girar motor 1</button>
+        <button class="stop" onclick="parar(1)">Parar motor 1</button>
+        <br>
+        <button onclick="motor(2)">Girar motor 2</button>
+        <button class="stop" onclick="parar(2)">Parar motor 2</button>
+    </section>
+
+    <section>
+        <h2>Cadastrar ovelha</h2>
+        <input id="tag" placeholder="Tag">
+        <input id="nome" placeholder="Nome">
+        <input id="peso" type="number" step="0.01" placeholder="Peso kg">
+        <button onclick="cadastrar()">Cadastrar</button>
+    </section>
+
+    <section>
+        <h2>Situação</h2>
+        <div id="situacao"></div>
+        <pre id="logs"></pre>
+    </section>
+
+    <button class="danger" onclick="reiniciar()">Reiniciar Raspberry Pi</button>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

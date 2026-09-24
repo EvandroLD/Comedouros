@@ -75,7 +75,7 @@ def rodar_site():
     try:
         web.registrar_status("Interface pronta")
         #use_reloader=False: o reloader do Flask so funciona na thread principal
-        web.app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False, threaded=True)
+        web.app.run(host="0.0.0.0", port=web.PORTA_SITE, debug=False, use_reloader=False, threaded=True)
     except Exception as erro:
         print(f"Erro ao iniciar o site: {erro}")
 
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     t2.start()
     t3.start()
     t4.start()
-    print("Site disponivel em http://<ip-da-raspberry>:5000")
+    print(f"Site disponivel em http://<ip-da-raspberry>:{web.PORTA_SITE}")
 
     try:
         while t1.is_alive():
