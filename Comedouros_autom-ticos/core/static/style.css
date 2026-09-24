@@ -1,0 +1,54 @@
+body {
+    font-family: Arial, sans-serif;
+    max-width: 900px;
+    margin: 24px auto;
+    padding: 0 16px;
+    background: #f3f5f7;
+    color: #17202a;
+}
+
+section {
+    background: white;
+    padding: 18px;
+    margin: 14px 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px #0001;
+}
+
+button {
+    padding: 10px 14px;
+    margin: 4px;
+    border: 0;
+    border-radius: 5px;
+    background: #1769aa;
+    color: white;
+    cursor: pointer;
+}
+
+button.stop {
+    background: #b42318;
+}
+
+button.danger {
+    background: #7a160f;
+}
+
+input {
+    padding: 10px;
+    margin: 4px;
+    width: 150px;
+}
+
+#pesos {
+    font-size: 1.4rem;
+    font-weight: bold;
+}
+
+#logs {
+    height: 150px;
+    overflow: auto;
+    background: #111;
+    color: #b9f6ca;
+    padding: 10px;
+    white-space: pre-wrap;
+}
