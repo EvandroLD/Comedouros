@@ -40,6 +40,8 @@ STATUS = {
     "mensagem": "Aguardando inicializacao",
     "peso1": None,
     "peso2": None,
+    "idade_peso1": None,
+    "idade_peso2": None,
     "motor1": "parado",
     "motor2": "parado",
 }
@@ -64,15 +66,24 @@ def caminho_tag_info():
 
 
 def atualizar_pesos():
-    try:
+    #Nao acessa o HX711: usa o ultimo peso lido pelo loop principal (bl.ler_peso),
+    #para o site nao disputar a balanca com o ciclo do cocho.
+    peso1, idade1 = bl.ultimo_peso(1)
+    peso2, idade2 = bl.ultimo_peso(2)
+    with STATUS_LOCK:
+        STATUS["peso1"] = peso1
+        STATUS["peso2"] = peso2
+        STATUS["idade_peso1"] = idade1
+        STATUS["idade_peso2"] = idade2
+
+
+def ler_balancas_continuamente(intervalo=1):
+    """So para quando o web_app roda sozinho: sem o loop da main.py ninguem le as balancas."""
+    while True:
         with HARDWARE_LOCK:
-            peso1, _ = bl.ler_peso(1)
-            peso2, _ = bl.ler_peso(2)
-        with STATUS_LOCK:
-            STATUS["peso1"] = peso1
-            STATUS["peso2"] = peso2
-    except Exception as erro:
-        registrar_status(f"Erro ao ler balancas: {erro}")
+            bl.ler_peso(1)
+            bl.ler_peso(2)
+        time.sleep(intervalo)
 
 #PRA QUE ISSO?
 def estado_motor(numero):
@@ -258,7 +269,8 @@ function motor(n){post('/api/motor/'+n)} function parar(n){post('/api/motor/'+n+
 async function calibrar2(){let peso=Number(document.getElementById('pesoCalibracao').value);if(!peso)return alert('Informe o peso conhecido');let j=await post('/api/calibrar/2',{peso});if(j.mensagem)alert(j.mensagem)}
 function cadastrar(){post('/api/ovelha',{tag_id:tag.value,nome:nome.value,peso:peso.value}).then(j=>{if(j.ok)alert('Ovelha cadastrada')})}
 function reiniciar(){if(confirm('Reiniciar a Raspberry Pi?'))post('/api/reiniciar')}
-async function atualizar(){let j=await fetch('/api/status').then(r=>r.json());pesos.textContent=`Balança 1: ${j.peso1??'erro'} kg | Balança 2: ${j.peso2??'erro'} kg`;situacao.textContent=`${j.mensagem}\nMotor 1: ${j.motor1}\nMotor 2: ${j.motor2}`;logs.textContent=j.logs.join('\n')}
+function textoPeso(peso,idade){if(idade==null)return 'sem leitura';let t=peso==null?'erro':`${peso.toFixed(3)} kg`;return idade>5?`${t} (há ${Math.round(idade)}s)`:t}
+async function atualizar(){let j=await fetch('/api/status').then(r=>r.json());pesos.textContent=`Balança 1: ${textoPeso(j.peso1,j.idade_peso1)} | Balança 2: ${textoPeso(j.peso2,j.idade_peso2)}`;situacao.textContent=`${j.mensagem}\nMotor 1: ${j.motor1}\nMotor 2: ${j.motor2}`;logs.textContent=j.logs.join('\n')}
 setInterval(atualizar,1000);atualizar();
 </script></body></html>
 """
@@ -279,6 +291,8 @@ if __name__ == "__main__":
         registrar_status("Interface pronta")
     except Exception as erro:
         registrar_status(f"Hardware ainda nao inicializado: {erro}")
+
+    threading.Thread(target=ler_balancas_continuamente, daemon=True).start()
 
     #CONFERIR ESSA PORTA
     app.run(host="0.0.0.0", port=5000)

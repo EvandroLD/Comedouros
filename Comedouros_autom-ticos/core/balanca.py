@@ -12,6 +12,10 @@ TIMEOUT_LEITURA_HX711_SEGUNDOS = 2
 VALOR_HX711_MINIMO = 1
 VALOR_HX711_MAXIMO = 0xFFFFFF - 1
 
+#ultimo peso lido de cada balanca: {num_balanca: (peso, time.monotonic())}
+#o site le daqui em vez de acessar o HX711 ao mesmo tempo que o loop principal
+ULTIMOS_PESOS = {}
+
 #configura os pinos GPIO para uma balanca
 def setup_balanca(dt, sck):
     # O initial=GPIO.LOW impede que o sensor entre em modo de suspensão
@@ -136,14 +140,26 @@ def ler_peso(num_balanca):
     if config["tara"] == 0:
         print(f"\nAVISO: Balança {num_balanca} não foi calibrada. Use a opção de calibração primeiro.")
         time.sleep(2)
+        ULTIMOS_PESOS[num_balanca] = (None, time.monotonic())
         return [None, None]
     try:
         leitura_atual = read_count(config["DT"], config["SCK"])
         peso = calculo_peso(config["tara"], leitura_atual, config["fator"])
+        ULTIMOS_PESOS[num_balanca] = (peso, time.monotonic())
         return [peso, leitura_atual]
     except Exception as e:
         print(f"erro na leitura hx711: {e}")
+        ULTIMOS_PESOS[num_balanca] = (None, time.monotonic())
         return [None, None]
+
+
+def ultimo_peso(num_balanca):
+    """Retorna (peso, segundos desde a leitura) da ultima leitura feita por ler_peso, sem acessar o hardware.
+    Se a balanca ainda nao foi lida, retorna (None, None)."""
+    if num_balanca not in ULTIMOS_PESOS:
+        return None, None
+    peso, instante = ULTIMOS_PESOS[num_balanca]
+    return peso, time.monotonic() - instante
 
 #FUNCAO PARA TESTAR OS HX
 def teste_hx(dt,sck):
