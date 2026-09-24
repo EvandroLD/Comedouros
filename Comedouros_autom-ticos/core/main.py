@@ -9,6 +9,7 @@ import botoes_manual as btm
 import motor as mt
 import sys
 import notificacoes as nt
+import web_app as web
 
 parar = threading.Event() #sistema para desligar todas as threads
 
@@ -69,6 +70,16 @@ def botao():
         mt.destravar(1, buffer_travado1)
 
 
+def rodar_site():
+    """Sobe o site (Flask) em paralelo. O hardware ja foi configurado por configurar_cocho()."""
+    try:
+        web.registrar_status("Interface pronta")
+        #use_reloader=False: o reloader do Flask so funciona na thread principal
+        web.app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False, threaded=True)
+    except Exception as erro:
+        print(f"Erro ao iniciar o site: {erro}")
+
+
 
 def desligar():
     """Para motores e limpa a GPIO. Best-effort, chamado uma vez no fim."""
@@ -102,12 +113,15 @@ if __name__ == "__main__":
     t1 = threading.Thread(target=rodar_ciclos, args=(sistemaCocho,), daemon = True)
     t2 = threading.Thread(target=notificar, args=(), daemon= True)
     t3 = threading.Thread(target=botao, args=(), daemon = True)
+    t4 = threading.Thread(target=rodar_site, args=(), daemon = True) #site: encerra junto com o programa
 
 # Iniciando as threads
 
     t1.start()
     t2.start()
     t3.start()
+    t4.start()
+    print("Site disponivel em http://<ip-da-raspberry>:5000")
 
     try:
         while t1.is_alive():
