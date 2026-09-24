@@ -15,6 +15,8 @@ import balanca as bl
 import motor
 from config import BALANCAS, TAG_INFO_CSV
 
+PORTA_SITE = 5004
+
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
@@ -253,4 +255,4 @@ if __name__ == "__main__":
 
     threading.Thread(target=ler_balancas_continuamente, daemon=True).start()
 
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=PORTA_SITE)
