@@ -59,6 +59,37 @@ def _planilha_esta_vazia(planilha):
     return len(planilha.get_all_values()) == 0
 
 
+#GARANTE QUE A PRIMEIRA LINHA DA PLANILHA É O CABECALHO E RETORNA AS LINHAS DE DADOS COMO DICIONARIOS
+def _ler_registros_garantindo_cabecalho(planilha, colunas):
+    valores = planilha.get_all_values()
+
+    if not valores:
+        planilha.append_row(colunas, value_input_option="USER_ENTERED")
+        return []
+
+    primeira_linha = [celula.strip() for celula in valores[0]]
+
+    #se a primeira linha não tem nenhum nome de coluna, ela é um registro e o cabecalho foi perdido.
+    #nesse caso o cabecalho é inserido no topo e todas as linhas são tratadas como dados, na ordem do CSV.
+    if not set(primeira_linha) & set(colunas):
+        logging.warning("Planilha sem cabeçalho na primeira linha. Inserindo o cabeçalho.")
+        planilha.insert_row(colunas, index=1, value_input_option="USER_ENTERED")
+        cabecalho = colunas
+        linhas = valores
+    else:
+        cabecalho = primeira_linha
+        linhas = valores[1:]
+
+    registros = []
+    for linha in linhas:
+        registro = {}
+        for posicao, nome in enumerate(cabecalho):
+            if nome and nome not in registro:
+                registro[nome] = linha[posicao] if posicao < len(linha) else ""
+        registros.append(registro)
+    return registros
+
+
 def salvar_registro_em_sheets(dados_do_registro: dict):
     try:
         planilha = _autenticar_e_abrir_planilha()
@@ -107,7 +138,7 @@ def sincronizar_csv_com_sheets():
 
         colunas = list(local.columns)
 
-        online = planilha.get_all_records()
+        online = _ler_registros_garantindo_cabecalho(planilha, colunas)
 
         if online:
             df_sheet = pd.DataFrame(online)
@@ -132,10 +163,6 @@ def sincronizar_csv_com_sheets():
             chave = chave_linha(linha)
             if chave not in chaves_sheet:
                 registros_faltantes.append(linha.to_dict())
-
-
-        if _planilha_esta_vazia(planilha):
-            planilha.append_row(colunas, value_input_option="USER_ENTERED")
 
         enviados = 0
         for registro in registros_faltantes:
