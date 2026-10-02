@@ -3,49 +3,145 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
     <title>Controle do Cocho</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232e7d4f' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18l-2 9H5L3 10Z'/%3E%3Cpath d='M7 10V7a5 5 0 0 1 10 0v3'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Controle do Cocho</h1>
+    <header class="topo">
+        <div class="marca">
+            <svg class="marca-icone" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 10h18l-2 9H5L3 10Z"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/>
+            </svg>
+            <div>
+                <h1>Controle do Cocho</h1>
+                <p class="subtitulo">Comedouro automático</p>
+            </div>
+        </div>
+        <div id="conexao" class="conexao" data-estado="carregando">
+            <span class="ponto"></span><span id="conexaoTexto">Conectando…</span>
+        </div>
+    </header>
 
-    <section>
-        <h2>Pesos</h2>
-        <div id="pesos">Carregando...</div>
-    </section>
+    <main>
+        <section class="pesos" aria-label="Pesos">
+            <article class="peso-card" id="cardPeso1">
+                <div class="peso-cabecalho">
+                    <span class="peso-titulo">Balança 1</span>
+                    <span class="etiqueta">Ração</span>
+                </div>
+                <div class="peso-valor"><span id="peso1">—</span><span class="unidade">kg</span></div>
+                <div class="peso-rodape" id="idade1">aguardando leitura</div>
+            </article>
+            <article class="peso-card" id="cardPeso2">
+                <div class="peso-cabecalho">
+                    <span class="peso-titulo">Balança 2</span>
+                    <span class="etiqueta">Animal</span>
+                </div>
+                <div class="peso-valor"><span id="peso2">—</span><span class="unidade">kg</span></div>
+                <div class="peso-rodape" id="idade2">aguardando leitura</div>
+            </article>
+        </section>
 
-    <section>
-        <h2>Balanças</h2>
-        <button onclick="post('/api/calibrar/1')">Calibrar balança 1</button>
-        <br>
-        <input id="pesoCalibracao" type="number" step="0.01" placeholder="Peso conhecido (kg)">
-        <button onclick="calibrar2()">Calibrar balança 2</button>
-    </section>
+        <div class="grade">
+            <section class="card">
+                <h2>Motores</h2>
+                <div class="motor">
+                    <div class="motor-info">
+                        <span class="motor-nome">Motor 1</span>
+                        <span class="pilula" id="motor1">—</span>
+                    </div>
+                    <div class="botoes">
+                        <button class="btn" onclick="motor(1, this)">Girar</button>
+                        <button class="btn btn-parar" onclick="parar(1, this)">Parar</button>
+                    </div>
+                </div>
+                <div class="motor">
+                    <div class="motor-info">
+                        <span class="motor-nome">Motor 2</span>
+                        <span class="pilula" id="motor2">—</span>
+                    </div>
+                    <div class="botoes">
+                        <button class="btn" onclick="motor(2, this)">Girar</button>
+                        <button class="btn btn-parar" onclick="parar(2, this)">Parar</button>
+                    </div>
+                </div>
+            </section>
 
-    <section>
-        <h2>Motores</h2>
-        <button onclick="motor(1)">Girar motor 1</button>
-        <button class="stop" onclick="parar(1)">Parar motor 1</button>
-        <br>
-        <button onclick="motor(2)">Girar motor 2</button>
-        <button class="stop" onclick="parar(2)">Parar motor 2</button>
-    </section>
+            <section class="card">
+                <h2>Calibração</h2>
+                <div class="bloco" id="calibracao1" data-estado="">
+                    <p class="dica" id="calibracaoDica1"></p>
+                    <div class="linha">
+                        <label class="campo">
+                            <span>Peso conhecido da balança 1 (kg)</span>
+                            <input id="pesoCalibracao1" type="number" step="any" min="0" inputmode="decimal" placeholder="ex: 0.2">
+                        </label>
+                        <button class="btn btn-secundario" id="btnCalibrar1" onclick="calibrar(1, this)">Calibrar balança 1</button>
+                    </div>
+                </div>
+                <div class="bloco" id="calibracao2" data-estado="">
+                    <p class="dica" id="calibracaoDica2"></p>
+                    <div class="linha">
+                        <label class="campo">
+                            <span>Peso conhecido da balança 2 (kg)</span>
+                            <input id="pesoCalibracao2" type="number" step="any" min="0" inputmode="decimal" placeholder="ex: 10">
+                        </label>
+                        <button class="btn btn-secundario" id="btnCalibrar2" onclick="calibrar(2, this)">Calibrar balança 2</button>
+                    </div>
+                </div>
+            </section>
 
-    <section>
-        <h2>Cadastrar ovelha</h2>
-        <input id="tag" placeholder="Tag">
-        <input id="nome" placeholder="Nome">
-        <input id="peso" type="number" step="0.01" placeholder="Peso kg">
-        <button onclick="cadastrar()">Cadastrar</button>
-    </section>
+            <section class="card" id="cardCadastro" data-estado="inativo">
+                <h2>Cadastrar ovelha</h2>
 
-    <section>
-        <h2>Situação</h2>
-        <div id="situacao"></div>
-        <pre id="logs"></pre>
-    </section>
+                <div class="cadastro-status">
+                    <span class="ponto-leitor"></span>
+                    <span id="cadastroTexto">Clique em Iniciar cadastro e aproxime a tag do leitor.</span>
+                </div>
 
-    <button class="danger" onclick="reiniciar()">Reiniciar Raspberry Pi</button>
+                <form id="formOvelha" class="formulario" onsubmit="salvarOvelha(event)">
+                    <label class="campo">
+                        <span>Nome</span>
+                        <input id="nome" autocomplete="off" required disabled>
+                    </label>
+                    <div class="linha">
+                        <label class="campo">
+                            <span>Peso (kg)</span>
+                            <input id="peso" type="number" step="0.01" min="0" inputmode="decimal" required disabled>
+                        </label>
+                        <label class="campo">
+                            <span>Valor</span>
+                            <input id="valor" type="number" step="any" min="0" inputmode="decimal" required disabled>
+                        </label>
+                    </div>
+                    <button class="btn" type="submit" id="btnSalvarOvelha" disabled>Salvar</button>
+                </form>
+
+                <div class="botoes-cadastro">
+                    <button class="btn btn-secundario" id="btnIniciarCadastro" onclick="iniciarCadastro(this)">Iniciar cadastro</button>
+                    <button class="btn btn-parar" id="btnFinalizarCadastro" onclick="finalizarCadastro(this)">Finalizar cadastro</button>
+                </div>
+            </section>
+
+            <section class="card card-larga">
+                <h2>Situação</h2>
+                <p id="situacao" class="situacao">Carregando…</p>
+                <pre id="logs" class="logs"></pre>
+            </section>
+        </div>
+
+        <section class="card zona-perigo">
+            <div>
+                <h2>Reiniciar Raspberry Pi</h2>
+                <p class="dica">O cocho e este site ficam fora do ar até a Raspberry voltar.</p>
+            </div>
+            <button class="btn btn-perigo" onclick="reiniciar(this)">Reiniciar</button>
+        </section>
+    </main>
+
+    <div id="avisos" class="avisos" aria-live="polite"></div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
