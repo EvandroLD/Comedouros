@@ -10,6 +10,14 @@ from config import *
 import math
 
 COLUNAS_PESO = {"peso_animal", "peso_racao"}
+COLUNAS_DATA = {"hora_entrada", "hora_saida"}
+
+FORMATOS_DATA = (
+    "%a %b %d %H:%M:%S %Y",   # formato do CSV
+    "%d/%m/%Y %H:%M:%S",      # formato Sheets 
+    "%Y-%m-%d %H:%M:%S",
+)
+
 
 
 #Autoriza as credenciais através do json e retorna a primeira aba da planilha
@@ -34,23 +42,36 @@ def normalizar_valor(valor):
 
     return str(valor).strip()
 
+#tem que alterar ainda
+def normalizar_data(valor):
+    texto = normalizar_valor(valor)
+    for formato in FORMATOS_DATA:
+        try:
+            return datetime.strptime(texto, formato).strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+    return texto
+
+
+
 def normalizar_peso(valor):
     try:
-        v = float(valor)
+        v = float(str(valor).strip().replace(",", "."))   # aceita "0,301"
     except (TypeError, ValueError):
         return ""
-    if not math.isfinite(v):      # pega None, nan e inf
+    if not math.isfinite(v):
         return ""
-    return round(v, 3)          # arredonda (não trunca)
+    return round(v, 3)# arredonda 
 
 
 def _normalizar_campo(coluna, valor):
     if coluna in COLUNAS_PESO:
         return normalizar_peso(valor)
+    if coluna in COLUNAS_DATA:
+        return normalizar_data(valor)
     return normalizar_valor(valor)
 
 
-#RECEBE OS DADOS COMO DICIONARIO, CRIA O CABECALHO E
 
 
 def _planilha_esta_vazia(planilha):
@@ -59,15 +80,27 @@ def _planilha_esta_vazia(planilha):
     return len(planilha.get_all_values()) == 0
 
 
+def formatar_para_envio(coluna, valor):
+    
+    if coluna in COLUNAS_PESO:
+        return normalizar_peso(valor)
+    
+    return normalizar_valor(valor)
+
+
 #GARANTE QUE A PRIMEIRA LINHA DA PLANILHA É O CABECALHO E RETORNA AS LINHAS DE DADOS COMO DICIONARIOS
 def _ler_registros_garantindo_cabecalho(planilha, colunas):
-    valores = planilha.get_all_values()
+    
+    valores = planilha.get_all_values(
+        value_render_option="UNFORMATTED_VALUE",       # números crus: 0.301, não "0,301"
+        date_time_render_option="FORMATTED_STRING",
+    )
 
     if not valores:
         planilha.append_row(colunas, value_input_option="USER_ENTERED")
         return []
 
-    primeira_linha = [celula.strip() for celula in valores[0]]
+    primeira_linha = [str(celula).strip() for celula in valores[0]]
 
     #se a primeira linha não tem nenhum nome de coluna, ela é um registro e o cabecalho foi perdido.
     #nesse caso o cabecalho é inserido no topo e todas as linhas são tratadas como dados, na ordem do CSV.
@@ -124,57 +157,39 @@ def sincronizar_csv_com_sheets():
     try:
         planilha = _autenticar_e_abrir_planilha()
 
-        #APENAS PROCURA SE EXISTE CSV
         if not os.path.exists(LOCAL_RELATORIO_CSV) or os.path.getsize(LOCAL_RELATORIO_CSV) == 0:
             logging.warning("CSV local não encontrado ou vazio. Nada para sincronizar.")
             return 0
 
-
-        local = pd.read_csv(LOCAL_RELATORIO_CSV)
+        #dtype=str evita que "11" vire "11.0" quando a coluna tem vazios
+        local = pd.read_csv(LOCAL_RELATORIO_CSV, dtype=str, keep_default_na=False)
 
         if local.empty:
             logging.info("CSV local está vazio. Nenhum dado para sincronizar.")
             return 0
 
         colunas = list(local.columns)
-
         online = _ler_registros_garantindo_cabecalho(planilha, colunas)
 
-        if online:
-            df_sheet = pd.DataFrame(online)
-            for coluna in colunas:
-                if coluna not in df_sheet.columns:
-                    df_sheet[coluna] = ""
-            df_sheet = df_sheet[colunas]
-        else:
-            df_sheet = pd.DataFrame(columns=colunas)
+        def chave(registro):
+            return tuple(_normalizar_campo(c, registro.get(c, "")) for c in colunas)
 
-        
-        def chave_linha(linha):
-            return tuple(_normalizar_campo(coluna, linha[coluna]) for coluna in colunas)
+        chaves_sheet = {chave(r) for r in online}
 
-        chaves_sheet = set()
-        for _, linha in df_sheet.iterrows():
-            chaves_sheet.add(chave_linha(linha))
+        linhas_novas = []
+        for registro in local.to_dict("records"):
+            k = chave(registro)
+            if k not in chaves_sheet:
+                linhas_novas.append([formatar_para_envio(c, registro[c]) for c in colunas])
+                chaves_sheet.add(k)
 
-        registros_faltantes = []
+        if linhas_novas:
+            #uma única chamada à API; RAW impede o Sheets de converter as datas
+            planilha.append_rows(linhas_novas, value_input_option="RAW")
 
-        for _, linha in local.iterrows():
-            chave = chave_linha(linha)
-            if chave not in chaves_sheet:
-                registros_faltantes.append(linha.to_dict())
-
-        enviados = 0
-        for registro in registros_faltantes:
-            if salvar_registro_em_sheets(registro):
-                enviados += 1
-            else:
-                logging.error(f"Falha ao sincronizar registro do CSV para Sheets: {registro}")
-
-        logging.info(f"Sincronização concluída: {enviados} registros enviados para o Sheets.")
-        return enviados
+        logging.info(f"Sincronização concluída: {len(linhas_novas)} registros enviados para o Sheets.")
+        return len(linhas_novas)
 
     except Exception as e:
         logging.error(f"Erro na sincronização CSV x Sheets: {e}")
         return 0
-

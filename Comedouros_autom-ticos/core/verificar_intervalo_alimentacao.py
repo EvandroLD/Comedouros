@@ -7,6 +7,12 @@ from config import TAG_INFO_CSV
 
 INTERVALO_HORAS = 24
 
+#Tem que retornar -2 no peso
+
+#entao tod
+
+#   if verificar_intervalo == TRUE
+#        return dicionario com todos os valores iguais (exceto o peso que deve ser -2), 
 
 def _tag_e_mestra(tag_id):
     """Carrega a configuração atual da tag e verifica a permissão mestra."""
@@ -33,7 +39,7 @@ def _tag_e_mestra(tag_id):
 
 def verificar_intervalo_alimentacao(tag_id, caminho_csv, intervalo_horas=INTERVALO_HORAS):
     """
-    Verifica se a tag atual já realizou alimentação nas últimas `intervalo_horas` horas.
+    Verifica se a tag atual já realizou alimentação nas últimas horas.
     A regra é individual por tag, com exceção da tag mestra, que sempre é liberada.
 
     Args:

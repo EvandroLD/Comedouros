@@ -59,7 +59,7 @@ class SistemaCocho:
             self.tag_info.to_csv(TAG_INFO_CSV, index=False)
             self.tag_info = pd.read_csv(TAG_INFO_CSV)
 
-    def logar_pesos_reais(self):
+    def print_pesos_reais(self):
         peso1, bruto1 = bl.ler_peso(1)
         peso2, bruto2 = bl.ler_peso(2)
         peso1_log = f"{peso1:.3f} kg" if peso1 is not None else "ERRO"
@@ -100,7 +100,7 @@ class SistemaCocho:
         entrada = time.ctime()
         inicio = time.monotonic()
 
-        self.logar_pesos_reais()
+        self.print_pesos_reais()
         
         try:
             
@@ -143,8 +143,8 @@ class SistemaCocho:
                                     f"{minutos}m {segundos:02d}s"
                                     if minutos != 0 or segundos != 0 else 0
                                 ),
-                                'peso_animal': 0,
-                                'peso_racao': -2
+                                'peso_animal': -2,
+                                'peso_racao': 0
                             }
 
                         ##TELEGRAM  ALERTA
@@ -170,7 +170,7 @@ class SistemaCocho:
 
                         #começa a rodar o motor e ler balanca 3. ALIMENTAÇÃO (Motor/Balança)
                         while True:
-                            self.logar_pesos_reais()
+                            self.print_pesos_reais()
 
                             if not sr.confirmar_presenca_sensor('1'):
                                 motor._definir_estado_normal(1, "parado", 0)
@@ -199,7 +199,7 @@ class SistemaCocho:
                         motor._definir_estado_normal(2, "horario", 255)
 
                         for _ in range(10):
-                            self.logar_pesos_reais()
+                            self.print_pesos_reais()
                             peso2,_ = bl.ler_peso(2)
                             if peso2 is not None:
                                 peso_animal_buffer.append(peso2)
