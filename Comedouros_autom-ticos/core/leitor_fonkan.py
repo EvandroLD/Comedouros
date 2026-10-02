@@ -42,14 +42,15 @@ def iniciar_leitor():
         print(f" Erro ao iniciar leitor: {e}")
         return None
 
-def ler_tags(leitor, timeout=5, tags_ignoradas=TAGS_RFID_IGNORADAS):
+def ler_tags(leitor, timeout=5, tags_ignoradas=TAGS_RFID_IGNORADAS, verbose=True):
     """
     Lê uma única tag dentro de um tempo limite e retorna seu ID.
 
     Args:
         leitor: O objeto do leitor RFID.
         timeout (int): O tempo máximo em segundos para tentar a leitura.
-
+        verbose (bool): False desliga os prints de "aproxime a tag", "tag lida" e
+            "tempo esgotado" (usado no cadastro pelo site, que le em loop).
     Returns:
         str: A ID da tag lida, ou None se o tempo esgotar ou ocorrer um erro.
     """
@@ -58,7 +59,8 @@ def ler_tags(leitor, timeout=5, tags_ignoradas=TAGS_RFID_IGNORADAS):
             print(" Leitor RFID não inicializado.")
             return None
 
-        print(f" Aproxime a tag do leitor... (timeout de {timeout} segundos)\n")
+        if verbose:
+            print(f" Aproxime a tag do leitor... (timeout de {timeout} segundos)\n")
         leitor.clear_serial_buffers()
         
         inicio_leitura = time.time()
@@ -77,13 +79,19 @@ def ler_tags(leitor, timeout=5, tags_ignoradas=TAGS_RFID_IGNORADAS):
                     raw_data = tag[0]
                     tag_id = normalizar_tag_id("".join(f"{word:04X}" for word in raw_data))
                     if tag_id in tags_ignoradas:
-                        print(f" Tag RFID ignorada: {tag_id}")
+                        if verbose:
+                            print(f" Tag RFID ignorada: {tag_id}")
                         continue
-                    print(f" Tag lida: {tag_id}")
+                    if verbose:
+                        print(f" Tag lida: {tag_id}")
                     return tag_id
             time.sleep(0.1)
             
-        print(" Tempo esgotado. Nenhuma tag foi lida.")
+        if verbose:
+            print(" Tempo esgotado. Nenhuma tag foi lida.")
+
+
+
         return None
 
     except Exception as e:

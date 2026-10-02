@@ -20,38 +20,48 @@ def rodar_ciclos(sistemaCocho):
     ultimo_log_pesos = 0
     while not parar.is_set(): #loop principal
 
-        if time.monotonic() - ultimo_log_pesos >= 1:
-
-            #atribuido alterado de logar_pesos_reais para print_pesos_reais
-            sistemaCocho.print_pesos_reais()
+        #antes só if time.monotonic() - ultimo_log_pesos >= 1:
+        if time.monotonic() - ultima_recal > 30 and not web.calibracao_em_andamento():      
+            sistemaCocho.logar_pesos_reais()
             ultimo_log_pesos = time.monotonic()
 
-        if time.monotonic() - ultima_recal > 30:     # a cada 30s
+        #a cada 30s; pula enquanto o site calibra, para nao tirar a tara com o peso de calibracao em cima
+        if time.monotonic() - ultima_recal > 30 and not web.calibracao_em_andamento():
             sistemaCocho.recalibrar_balanca_sem_presenca() #enquanto não há vacas no cocho, o sistema fica recalibrando a balança
             ultima_recal = time.monotonic()
-        
-        if sr.confirmar_presenca_sensor('1'): #se tiver vacas no sensor 1, o ciclo se inicia
-            print("presença confirmada no sensor 1, entrando no ciclo cocho")
-            resposta = sistemaCocho.executar_um_ciclo()
-            print(resposta) #retorna os dados sobre o que aconteceu no ciclo.
 
-            #RELATORIO TELEGRAM
-            if resposta:
-                nt.notificar_relatorio_alimentacao(resposta)
-            
-            #SHEETS
-            if resposta and list(resposta.values())[0]:
-                sistemaCocho.relatorio_csv = pd.read_csv(LOCAL_RELATORIO_CSV)
-                rl.salvar_registro_csv(sistemaCocho.relatorio_csv, resposta)
 
-                if resposta.get('peso_animal') > -1:
-                    sistemaCocho.salvar_peso_animal(resposta['tag_id'], resposta['peso_animal'])
+            #FOI TROCADO 
+            if sr.confirmar_presenca_sensor('1'): #se tiver vacas no sensor 1, o ciclo se inicia
+                #cadastro de ovelhas aberto no site: ele esta usando o leitor RFID, alimentacao pausada
+                if not web.USO_COCHO.acquire(blocking=False):
+                    parar.wait(0.5)
+                    continue
+                try:
+                    print("presença confirmada no sensor 1, entrando no ciclo cocho")
+                    resposta = sistemaCocho.executar_um_ciclo()
+                    print(resposta)
+
+                    #RELATORIO TELEGRAM
+                    if resposta:
+                        nt.notificar_relatorio_alimentacao(resposta)
+
+                    #SHEETS
+                    if resposta and list(resposta.values())[0]:
+                        sistemaCocho.relatorio_csv = pd.read_csv(LOCAL_RELATORIO_CSV)
+                        rl.salvar_registro_csv(sistemaCocho.relatorio_csv, resposta)
+
+                        if resposta.get('peso_animal') > -1:
+                            sistemaCocho.salvar_peso_animal(resposta['tag_id'], resposta['peso_animal'])
+                finally:
+                    web.USO_COCHO.release()
 
 def notificar():
         
     while not parar.is_set():
-        rl.sincronizar_csv_com_sheets()
-        print(f"enviando csv para sheets")
+        enviados = rl.sincronizar_csv_com_sheets()
+        if enviados:
+            print(f"{enviados} registros novos enviados para o Google Sheets")
         parar.wait(30)
 
 def botao():
@@ -103,7 +113,7 @@ if __name__ == "__main__":
     try:
         sistemaCocho.configurar_cocho()
         print("\nLeitura inicial das balanças:")
-        sistemaCocho.print_pesos_reais()
+        sistemaCocho.logar_pesos_reais()
     except KeyboardInterrupt:
         desligar()
         sys.exit()
@@ -115,6 +125,9 @@ if __name__ == "__main__":
     t1 = threading.Thread(target=rodar_ciclos, args=(sistemaCocho,), daemon = True)
     t2 = threading.Thread(target=notificar, args=(), daemon= True)
     t3 = threading.Thread(target=botao, args=(), daemon = True)
+
+    #FOI ACRESCENTADO
+    web.configurar_leitor_rfid(sistemaCocho.leitor_rfid) #o site usa o mesmo leitor no cadastro de ovelhas
     t4 = threading.Thread(target=rodar_site, args=(), daemon = True) #site: encerra junto com o programa
 
 # Iniciando as threads

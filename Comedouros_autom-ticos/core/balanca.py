@@ -5,6 +5,7 @@ from config import *
 import csv
 import os
 import grafico_maker
+import threading
 
 
 
@@ -15,6 +16,14 @@ VALOR_HX711_MAXIMO = 0xFFFFFF - 1
 #ultimo peso lido de cada balanca: {num_balanca: (peso, time.monotonic())}
 #o site le daqui em vez de acessar o HX711 ao mesmo tempo que o loop principal
 ULTIMOS_PESOS = {}
+
+
+
+#uma trava por HX711 (pelo pino DT): o loop principal e a calibracao pelo site rodam em
+#threads diferentes, e duas leituras ao mesmo tempo no mesmo HX711 corrompem as duas
+_TRAVAS_HX711 = {config["DT"]: threading.Lock() for config in BALANCAS.values()}
+_TRAVA_HX711_PADRAO = threading.Lock()
+
 
 #configura os pinos GPIO para uma balanca
 def setup_balanca(dt, sck):
@@ -27,39 +36,41 @@ def setup_balanca(dt, sck):
 #apenas para ler o HX, retorna um numero inteiro de 24 bits
 def read_count(dt, sck, timeout=TIMEOUT_LEITURA_HX711_SEGUNDOS):
 
-    #inicia o count para alocar os dados convertidos pelo HX
-    count = 0
+    #FOI ALTERADO
+    with _TRAVAS_HX711.get(dt, _TRAVA_HX711_PADRAO):
+        #inicia o count para alocar os dados convertidos pelo HX
+        count = 0
 
-    #inicia o clock em baixo
-    GPIO.output(sck, False)
+        #inicia o clock em baixo
+        GPIO.output(sck, False)
 
-    #guarda o instante inicial da leitura do sensor
-    inicio = time.monotonic()
+        #guarda o instante inicial da leitura do sensor
+        inicio = time.monotonic()
 
-    #tenta ler o dado do HX, se demorar demais retorna um erro
-    while GPIO.input(dt):
-        if time.monotonic() - inicio > timeout:
+        #tenta ler o dado do HX, se demorar demais retorna um erro
+        while GPIO.input(dt):
+            if time.monotonic() - inicio > timeout:
+                GPIO.output(sck, False)
+                raise TimeoutError(f"Timeout ao ler HX711 (DT={dt}, SCK={sck}).")
+            time.sleep(0.0001)
+
+        #le os 24 bits que o HX envia
+        for _ in range(24):
+            GPIO.output(sck, True)
             GPIO.output(sck, False)
-            raise TimeoutError(f"Timeout ao ler HX711 (DT={dt}, SCK={sck}).")
-        time.sleep(0.0001)
-
-    #le os 24 bits que o HX envia
-    for _ in range(24):
+            #desloca os bits para a esquerda para esperar os proximos
+            count = count << 1
+            if GPIO.input(dt):
+                count += 1
+        #ligando o HX novamente para ajustar o valor bruto
         GPIO.output(sck, True)
         GPIO.output(sck, False)
-        #desloca os bits para a esquerda para esperar os proximos
-        count = count << 1
-        if GPIO.input(dt):
-            count += 1
-    #ligando o HX novamente para ajustar o valor bruto
-    GPIO.output(sck, True)
-    GPIO.output(sck, False)
-    count = count ^ 0x800000
+        count = count ^ 0x800000
 
-    if not VALOR_HX711_MINIMO <= count <= VALOR_HX711_MAXIMO:
-        raise ValueError(f"Leitura HX711 saturada ou invalida: {count}")
+        if not VALOR_HX711_MINIMO <= count <= VALOR_HX711_MAXIMO:
+            raise ValueError(f"Leitura HX711 saturada ou invalida: {count}")
 
-    return count
+        return count
 
 #TRANSFORMA LEITURA BRUTA EM PESO REAL 
 def calculo_peso(tara, leitura, fator):
