@@ -30,7 +30,7 @@ class SistemaCocho:
             self.relatorio_csv = pd.read_csv(LOCAL_RELATORIO_CSV)
             motor.setup_todos_os_motores()
             motor._definir_estado_normal(2, "horario", 255)
-            time.sleep(7)
+            time.sleep(1)
             motor._definir_estado_normal(2, "parado", 0)
             for num, config in BALANCAS.items():
                 bl.setup_balanca(config["DT"], config["SCK"])
