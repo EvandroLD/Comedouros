@@ -103,7 +103,9 @@ class SistemaCocho:
         self.print_pesos_reais()
         
         try:
-            
+
+            self.tag_info = pd.read_csv(TAG_INFO_CSV)
+
             while sr.confirmar_presenca_sensor('1'): #começa confirmando a presença do animal
 
                 tag = rfid.normalizar_tag_id(
