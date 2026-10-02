@@ -5,7 +5,6 @@ import time
 from pathlib import Path
 import requests
 
-
 def _carregar_tag_info():
     """Carrega as tags usando a configuração e o CSV do projeto atual."""
     try:
@@ -52,14 +51,10 @@ def _carregar_tag_info():
 
 TAG_INFO = _carregar_tag_info()
 
-BOT_TOKEN = os.environ.get(
-    "TELEGRAM_BOT_TOKEN",
-    "COLE_SEU_TOKEN_DO_BOT_AQUI",
-).strip()
-CHAT_ID = os.environ.get(
-    "TELEGRAM_CHAT_ID",
-    "COLE_SEU_CHAT_ID_AQUI",
-).strip()
+from config import BOT_TOKEN, CHAT_ID
+
+BOT_TOKEN = str(BOT_TOKEN).strip()
+CHAT_ID = str(CHAT_ID).strip()
 
 
 def _resolver_log_path():

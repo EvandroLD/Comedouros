@@ -59,10 +59,23 @@ SCOPE = [
 ]
 
 
-LOCAL_RELATORIO_CSV = "/home/raspberry/comedouros-automaticos_2.0/core/relatorio_cocho.csv"
+LOCAL_RELATORIO_CSV = "/home/raspberry/comedouros_3/Comedouros/Comedouros_autom-ticos/core/relatorio_cocho.csv"
 LOCAL_CREDENCIAL = "/home/raspberry/comedouros-automaticos_2.0/core/SheetsKey.json"
 NOME_PLANILHA = "Relatorio_Cocho" 
 
 # --- Dados tag_info.csv ---
 
 TAG_INFO_CSV = "/home/raspberry/comedouros-automaticos_2.0/core/tag_info.csv"
+
+# Dados Telegram
+
+
+BOT_TOKEN = "8130076024:AAH3WOv1xJAT5ylbZRuGJmMMlkb3b2Exf18"
+CHAT_ID = "-1002684732798"
+LOG_FILE_PATH = "/home/raspberry/comedouros-automaticos/core/cocho_log.txt"
+
+
+
+
+
+

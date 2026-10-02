@@ -21,7 +21,9 @@ def rodar_ciclos(sistemaCocho):
     while not parar.is_set(): #loop principal
 
         if time.monotonic() - ultimo_log_pesos >= 1:
-            sistemaCocho.logar_pesos_reais()
+
+            #atribuido alterado de logar_pesos_reais para print_pesos_reais
+            sistemaCocho.print_pesos_reais()
             ultimo_log_pesos = time.monotonic()
 
         if time.monotonic() - ultima_recal > 30:     # a cada 30s
@@ -101,7 +103,7 @@ if __name__ == "__main__":
     try:
         sistemaCocho.configurar_cocho()
         print("\nLeitura inicial das balanças:")
-        sistemaCocho.logar_pesos_reais()
+        sistemaCocho.print_pesos_reais()
     except KeyboardInterrupt:
         desligar()
         sys.exit()
