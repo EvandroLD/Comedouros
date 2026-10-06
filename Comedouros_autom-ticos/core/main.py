@@ -22,7 +22,7 @@ def rodar_ciclos(sistemaCocho):
 
         #antes só if time.monotonic() - ultimo_log_pesos >= 1:
         if time.monotonic() - ultima_recal > 30 and not web.calibracao_em_andamento():      
-            sistemaCocho.logar_pesos_reais()
+            sistemaCocho.print_pesos_reais()
             ultimo_log_pesos = time.monotonic()
 
         #a cada 30s; pula enquanto o site calibra, para nao tirar a tara com o peso de calibracao em cima
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     try:
         sistemaCocho.configurar_cocho()
         print("\nLeitura inicial das balanças:")
-        sistemaCocho.logar_pesos_reais()
+        sistemaCocho.print_pesos_reais()
     except KeyboardInterrupt:
         desligar()
         sys.exit()

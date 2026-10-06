@@ -38,7 +38,7 @@ TAGS_RFID_IGNORADAS = {
 
 # --- CONFIGURAÇÕES DA BALANCA ---
 BALANCAS = {
-        1: {"DT": 15, "SCK": 13, "fator": -136833.195, "tara": 0},  # Balança da ração
+        1: {"DT": 15, "SCK": 13, "fator": 130776, "tara": 0},  # Balança da ração
         2: {"DT": 7, "SCK": 11, "fator": -7228.267, "tara": 0},   # Balança do animal
     }
 
