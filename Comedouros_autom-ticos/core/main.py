@@ -32,29 +32,29 @@ def rodar_ciclos(sistemaCocho):
 
 
             #FOI TROCADO 
-            if sr.confirmar_presenca_sensor('1'): #se tiver vacas no sensor 1, o ciclo se inicia
-                #cadastro de ovelhas aberto no site: ele esta usando o leitor RFID, alimentacao pausada
-                if not web.USO_COCHO.acquire(blocking=False):
-                    parar.wait(0.5)
-                    continue
-                try:
-                    print("presença confirmada no sensor 1, entrando no ciclo cocho")
-                    resposta = sistemaCocho.executar_um_ciclo()
-                    print(resposta)
+        if sr.confirmar_presenca_sensor('1'): #se tiver vacas no sensor 1, o ciclo se inicia
+            #cadastro de ovelhas aberto no site: ele esta usando o leitor RFID, alimentacao pausada
+            if not web.USO_COCHO.acquire(blocking=False):
+                parar.wait(0.5)
+                continue
+            try:
+                print("presença confirmada no sensor 1, entrando no ciclo cocho")
+                resposta = sistemaCocho.executar_um_ciclo()
+                print(resposta)
 
-                    #RELATORIO TELEGRAM
-                    if resposta:
-                        nt.notificar_relatorio_alimentacao(resposta)
+                #RELATORIO TELEGRAM
+                if resposta:
+                    nt.notificar_relatorio_alimentacao(resposta)
 
-                    #SHEETS
-                    if resposta and list(resposta.values())[0]:
-                        sistemaCocho.relatorio_csv = pd.read_csv(LOCAL_RELATORIO_CSV)
-                        rl.salvar_registro_csv(sistemaCocho.relatorio_csv, resposta)
+                #SHEETS
+                if resposta and list(resposta.values())[0]:
+                    sistemaCocho.relatorio_csv = pd.read_csv(LOCAL_RELATORIO_CSV)
+                    rl.salvar_registro_csv(sistemaCocho.relatorio_csv, resposta)
 
-                        if resposta.get('peso_animal') > -1:
-                            sistemaCocho.salvar_peso_animal(resposta['tag_id'], resposta['peso_animal'])
-                finally:
-                    web.USO_COCHO.release()
+                    if resposta.get('peso_animal') > -1:
+                        sistemaCocho.salvar_peso_animal(resposta['tag_id'], resposta['peso_animal'])
+            finally:
+                web.USO_COCHO.release()
 
 def notificar():
         
