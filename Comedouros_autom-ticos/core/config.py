@@ -16,7 +16,7 @@ SENSOR_2_RELEASE_CONFIRMATION_TIME = 1.0
 SENSOR_1_POLL_INTERVAL = 0.05
 SENSOR_2_POLL_INTERVAL = 0.05
 SENSOR_2_CONFIRMATION_TIME = 0.5
-TEMPO_ESPERA_RETORNO_ANIMAL = 30
+TEMPO_ESPERA_RETORNO_ANIMAL = 30 #sera que é isso?
 
 # --- CONFIGURAÇÕES DE HARDWARE (PINOS GPIO BOARD) ---
 PINO_RELE = 10
@@ -60,12 +60,12 @@ SCOPE = [
 
 
 LOCAL_RELATORIO_CSV = "/home/raspberry/comedouros_3/Comedouros/Comedouros_autom-ticos/core/relatorio_cocho.csv"
-LOCAL_CREDENCIAL = "/home/raspberry/comedouros-automaticos_2.0/core/SheetsKey.json"
+LOCAL_CREDENCIAL = "/home/raspberry/comedouros_3/Comedouros/Comedouros_autom-ticos/core/SheetsKey.json"
 NOME_PLANILHA = "Relatorio_Cocho" 
 
 # --- Dados tag_info.csv ---
 
-TAG_INFO_CSV = "/home/raspberry/comedouros-automaticos_2.0/core/tag_info.csv"
+TAG_INFO_CSV = "/home/raspberry/comedouros_3/Comedouros/Comedouros_autom-ticos/core/tag_info.csv"
 
 # Dados Telegram
 

@@ -183,7 +183,7 @@ class SistemaCocho:
                             if peso1 is not None:
                                 self.peso_racao_buffer.append(peso1)
 
-                            if len(self.peso_racao_buffer) > 10:
+                            if len(self.peso_racao_buffer) > 5:
                                 self.peso_racao_buffer.pop(0)
                                 print(f'lendo peso despejado {peso_racao_despejada}')
                                 if (peso_racao_despejada:= np.median(self.peso_racao_buffer)) > peso_racao:
@@ -191,12 +191,12 @@ class SistemaCocho:
                                     break
                             if (peso_racao_despejada > (0.7*peso_racao)):
                                 print(f'{peso_racao_despejada} > 0.7* {peso_racao}')
-                                motor._definir_estado_normal(1,"horario", 80)
+                                motor._definir_estado_normal(1,"horario", 45)
                             else:
-                                motor._definir_estado_normal(1,"horario", 150)
+                                motor._definir_estado_normal(1,"horario", 200)
 
 
-                        motor._definir_estado_normal(1, "parado", 0)
+                        motor._definir_estado_normal(1, "parado", 0) 
 
                         motor._definir_estado_normal(2, "horario", 255)
 
