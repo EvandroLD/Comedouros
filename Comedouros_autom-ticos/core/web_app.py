@@ -148,17 +148,26 @@ def calibracao_em_andamento():
     return em_andamento
 
 
-def zerar_balanca(numero):
+def calibracao_ainda_ativa(numero, estado, inicio):
+    """True se a calibracao iniciada em `inicio` nao foi cancelada (chamar com CALIBRACAO_LOCK)."""
+    return CALIBRACAO[numero] == estado and CALIBRACAO_INICIO[numero] == inicio
+
+
+def zerar_balanca(numero, inicio):
     """1o passo da calibracao (roda em thread): mede a tara com a balanca vazia."""
     try:
         with HARDWARE_LOCK:
             bl.calibrar_balanca(numero)
     except Exception as erro:
         with CALIBRACAO_LOCK:
+            if not calibracao_ainda_ativa(numero, "zerando", inicio):
+                return  #cancelada enquanto zerava
             CALIBRACAO[numero] = None
         registrar_status(f"Erro ao zerar a balança {numero}: {erro}")
         return
     with CALIBRACAO_LOCK:
+        if not calibracao_ainda_ativa(numero, "zerando", inicio):
+            return  #cancelada enquanto zerava: nao volta para "aguardando_peso"
         CALIBRACAO[numero] = "aguardando_peso"
     registrar_status(
         f"Balança {numero} zerada. Coloque o peso conhecido e clique em Calibrar balança {numero} de novo."
@@ -203,9 +212,10 @@ def api_calibrar(numero):
         if estado is None:
             CALIBRACAO[numero] = "zerando"
             CALIBRACAO_INICIO[numero] = time.monotonic()
+        inicio = CALIBRACAO_INICIO[numero]
     if estado is None:
         registrar_status(f"Zerando a balança {numero}: mantenha a balança sem peso.")
-        threading.Thread(target=zerar_balanca, args=(numero,), daemon=True).start()
+        threading.Thread(target=zerar_balanca, args=(numero, inicio), daemon=True).start()
         return jsonify(
             ok=True, etapa="tara",
             mensagem=f"Retire o peso da balança {numero}. Depois coloque o peso conhecido e clique novamente.",
@@ -220,15 +230,32 @@ def api_calibrar(numero):
             fator = (leitura_bruta - tara) / peso_conhecido
             if fator == 0:
                 raise ValueError("fator calculado igual a zero (o peso está na balança?)")
-            BALANCAS[numero]["fator"] = fator
             leitura = bl.calculo_peso(tara, leitura_bruta, fator)
     except Exception as erro:
         registrar_status(f"Erro ao calibrar a balança {numero}: {erro}. Clique de novo para tentar outra vez.")
         return jsonify(ok=False, erro=str(erro)), 500
     with CALIBRACAO_LOCK:
+        #so grava o fator se a calibracao nao foi cancelada durante a leitura
+        if not calibracao_ainda_ativa(numero, "aguardando_peso", inicio):
+            return jsonify(ok=False, erro=f"A calibração da balança {numero} foi cancelada."), 409
+        BALANCAS[numero]["fator"] = fator
         CALIBRACAO[numero] = None
     registrar_status(f"Balança {numero} calibrada (fator {fator:.3f}).")
     return jsonify(ok=True, leitura=leitura, fator=fator)
+
+
+@app.post("/api/calibrar/<int:numero>/cancelar")
+def api_calibrar_cancelar(numero):
+    """Cancela a calibracao em andamento: o fator anterior e mantido."""
+    if numero not in BALANCAS:
+        return jsonify(ok=False, erro="Balança inválida."), 400
+    with CALIBRACAO_LOCK:
+        estado = CALIBRACAO[numero]
+        CALIBRACAO[numero] = None
+    if estado is None:
+        return jsonify(ok=False, erro=f"Nenhuma calibração da balança {numero} em andamento."), 409
+    registrar_status(f"Calibração da balança {numero} cancelada pelo site. O fator anterior foi mantido.")
+    return jsonify(ok=True)
 
 
 @app.post("/api/motor/<int:numero>")
