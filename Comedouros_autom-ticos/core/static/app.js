@@ -64,6 +64,12 @@ async function calibrar(numero, botao) {
     atualizar();
 }
 
+async function cancelarCalibracao(numero, botao) {
+    const resposta = await post(`/api/calibrar/${numero}/cancelar`, {}, botao);
+    if (resposta.ok) avisar(`Calibração da balança ${numero} cancelada`);
+    atualizar();
+}
+
 // estado: null | "zerando" | "aguardando_peso"
 function mostrarCalibracao(numero, estado) {
     const bloco = document.getElementById(`calibracao${numero}`);
