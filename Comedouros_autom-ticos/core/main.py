@@ -55,6 +55,8 @@ def rodar_ciclos(sistemaCocho):
                         sistemaCocho.salvar_peso_animal(resposta['tag_id'], resposta['peso_animal'])
             finally:
                 web.USO_COCHO.release()
+        else:
+            parar.wait(0.05) #sem animal: evita loop a 100% de CPU disputando o GIL com o site e os botoes
 
 def notificar():
         

@@ -93,13 +93,17 @@ def aguardar_sensor_livre(sensor, logger=None):
                 return True
         else:
             inicio_livre = None
-            if logger and agora - ultimo_log >= 5:
+            if agora - ultimo_log >= 5:
                 nivel_atual = GPIO.input(pin)
-                logger.warning(
+                mensagem = (
                     f"Sensor {sensor} ainda indica presenca no pino {pin} "
                     f"(nivel atual: {nivel_atual}, nivel de presenca configurado: "
                     f"{presenca_nivel}). Aguardando liberar antes do RFID."
                 )
+                if logger:
+                    logger.warning(mensagem)
+                else:
+                    print(mensagem)
                 ultimo_log = agora
 
         time.sleep(poll_interval)
