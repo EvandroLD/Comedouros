@@ -279,7 +279,12 @@ h1 {
     flex: 1 1 140px;
 }
 
-.bloco[data-estado="zerando"] .dica,
+/* "Cancelar calibração" so aparece com uma calibracao em andamento */
+.bloco:not([data-estado="lendo"]):not([data-estado="aguardando_peso"]) .btn-cancelar-calibracao {
+    display: none;
+}
+
+.bloco[data-estado="lendo"] .dica,
 .bloco[data-estado="aguardando_peso"] .dica {
     color: var(--alerta);
     font-weight: 600;
