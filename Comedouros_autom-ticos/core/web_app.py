@@ -1,7 +1,6 @@
 import csv
 import logging
 import os
-import statistics
 import subprocess
 import threading
 import time
@@ -11,11 +10,13 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 import RPi.GPIO as GPIO
+import numpy as np
 
 import balanca as bl
 import leitor_fonkan as rfid
 import motor
-from config import BALANCAS, TAG_INFO_CSV
+from config import BALANCAS, PESOS_CALIBRACAO_KG, TAG_INFO_CSV
+from utils_config import atualizar_fator_config
 
 PORTA_SITE = 5004
 
@@ -48,15 +49,17 @@ STATUS = {
 
 LOGS = deque(maxlen=100)
 
-#Calibracao em dois passos, igual para as duas balancas:
-#  1o clique: zera a balanca (tara) -> "zerando" -> "aguardando_peso"
-#  2o clique: com o peso conhecido em cima, calcula o fator -> None
+#Calibracao em tres etapas, igual ao botao fisico (PESOS_CALIBRACAO_KG, ex: 0.1, 0.2 e 0.3 kg).
+#Um botao inicia a calibracao e avanca as etapas; outro botao cancela:
+#  1o clique: inicia -> "aguardando_peso" (etapa 0)
+#  cada clique seguinte: le a balanca com o peso da etapa em cima ("lendo") e avanca;
+#  depois da ultima etapa calcula fator e tara pela reta dos tres pontos -> None
 CALIBRACAO_LOCK = threading.Lock()
-CALIBRACAO = {1: None, 2: None}        #None | "zerando" | "aguardando_peso"
+CALIBRACAO = {1: None, 2: None}        #None | "aguardando_peso" | "lendo"
+CALIBRACAO_LEITURAS = {1: [], 2: []}   #leituras brutas ja registradas (uma por etapa)
 CALIBRACAO_INICIO = {1: 0.0, 2: 0.0}
 #Calibracao esquecida no meio e cancelada, para a tara automatica do loop voltar a rodar
 CALIBRACAO_TEMPO_MAXIMO = 10 * 60
-LEITURAS_FATOR = 10
 
 #Travado enquanto o cocho esta em uso: pelo ciclo de alimentacao (main.py) ou por um
 #cadastro de ovelhas aberto no site. Os dois usam o mesmo leitor RFID, entao nunca rodam juntos.
@@ -131,7 +134,14 @@ def status_atual():
         resultado["cadastro"] = {"estado": CADASTRO["estado"], "tag": CADASTRO["tag"]}
     calibracao_em_andamento()  #cancela calibracoes esquecidas
     with CALIBRACAO_LOCK:
-        resultado["calibracao"] = {str(numero): estado for numero, estado in CALIBRACAO.items()}
+        resultado["calibracao"] = {
+            str(numero): {
+                "estado": estado,
+                "etapa": len(CALIBRACAO_LEITURAS[numero]),
+                "pesos": list(PESOS_CALIBRACAO_KG[numero]),
+            }
+            for numero, estado in CALIBRACAO.items()
+        }
     return resultado
 
 
@@ -143,6 +153,7 @@ def calibracao_em_andamento():
         for numero, estado in CALIBRACAO.items():
             if estado and time.monotonic() - CALIBRACAO_INICIO[numero] > CALIBRACAO_TEMPO_MAXIMO:
                 CALIBRACAO[numero] = None
+                CALIBRACAO_LEITURAS[numero] = []
                 cancelar.append(numero)
         em_andamento = any(CALIBRACAO.values())
     for numero in cancelar:
@@ -155,41 +166,17 @@ def calibracao_ainda_ativa(numero, estado, inicio):
     return CALIBRACAO[numero] == estado and CALIBRACAO_INICIO[numero] == inicio
 
 
-def zerar_balanca(numero, inicio):
-    """1o passo da calibracao (roda em thread): mede a tara com a balanca vazia."""
-    try:
-        with HARDWARE_LOCK:
-            bl.calibrar_balanca(numero)
-    except Exception as erro:
-        with CALIBRACAO_LOCK:
-            if not calibracao_ainda_ativa(numero, "zerando", inicio):
-                return  #cancelada enquanto zerava
-            CALIBRACAO[numero] = None
-        registrar_status(f"Erro ao zerar a balança {numero}: {erro}")
-        return
-    with CALIBRACAO_LOCK:
-        if not calibracao_ainda_ativa(numero, "zerando", inicio):
-            return  #cancelada enquanto zerava: nao volta para "aguardando_peso"
-        CALIBRACAO[numero] = "aguardando_peso"
-    registrar_status(
-        f"Balança {numero} zerada. Coloque o peso conhecido e clique em Calibrar balança {numero} de novo."
-    )
-
-
-def ler_bruto_mediana(numero, quantidade=LEITURAS_FATOR):
-    """Mediana de varias leituras brutas validas: uma leitura so pode vir com ruido ou saturada."""
-    config = BALANCAS[numero]
-    leituras = []
-    for _ in range(quantidade * 2):
-        try:
-            leituras.append(bl.read_count(config["DT"], config["SCK"]))
-        except (TimeoutError, ValueError):
-            continue
-        if len(leituras) >= quantidade:
-            break
-    if len(leituras) < quantidade // 2:
-        raise RuntimeError("poucas leituras válidas do HX711")
-    return statistics.median(leituras)
+def concluir_calibracao(numero, leituras):
+    """Ajusta a reta leitura = fator * peso + tara pelos tres pontos e aplica na balanca."""
+    pesos = np.asarray(PESOS_CALIBRACAO_KG[numero], dtype=float)
+    fator, tara = np.polyfit(pesos, np.asarray(leituras, dtype=float), 1)
+    if not np.isfinite(fator) or fator == 0:
+        raise ValueError("fator calculado inválido (os pesos estavam na balança?)")
+    fator, tara = float(fator), float(tara)
+    salvo = atualizar_fator_config(numero, fator)
+    bl.salvar_tara(numero, tara)
+    BALANCAS[numero]["fator"] = fator
+    return fator, salvo
 
 
 @app.get("/api/status")
@@ -199,51 +186,73 @@ def api_status():
 
 @app.post("/api/calibrar/<int:numero>")
 def api_calibrar(numero):
+    """Botao unico da calibracao: inicia, e a cada clique registra o peso da etapa atual."""
     if numero not in BALANCAS:
         return jsonify(ok=False, erro="Balança inválida."), 400
-    dados = request.get_json(silent=True) or {}
-    try:
-        peso_conhecido = float(dados.get("peso", 0))
-    except (TypeError, ValueError):
-        peso_conhecido = 0
-    if peso_conhecido <= 0:
-        return jsonify(ok=False, erro="Informe um peso conhecido maior que zero."), 400
+    pesos = PESOS_CALIBRACAO_KG[numero]
 
     with CALIBRACAO_LOCK:
         estado = CALIBRACAO[numero]
         if estado is None:
-            CALIBRACAO[numero] = "zerando"
+            CALIBRACAO[numero] = "aguardando_peso"
+            CALIBRACAO_LEITURAS[numero] = []
             CALIBRACAO_INICIO[numero] = time.monotonic()
+        elif estado == "aguardando_peso":
+            CALIBRACAO[numero] = "lendo"
         inicio = CALIBRACAO_INICIO[numero]
+        etapa = len(CALIBRACAO_LEITURAS[numero])
     if estado is None:
-        registrar_status(f"Zerando a balança {numero}: mantenha a balança sem peso.")
-        threading.Thread(target=zerar_balanca, args=(numero, inicio), daemon=True).start()
-        return jsonify(
-            ok=True, etapa="tara",
-            mensagem=f"Retire o peso da balança {numero}. Depois coloque o peso conhecido e clique novamente.",
+        mensagem = (
+            f"Calibração da balança {numero} iniciada. "
+            f"Coloque o 1º peso ({pesos[0]:g} kg) e clique em Registrar peso."
         )
-    if estado == "zerando":
-        return jsonify(ok=False, erro=f"Aguarde: a balança {numero} ainda está sendo zerada."), 409
+        registrar_status(mensagem)
+        return jsonify(ok=True, etapa=0, mensagem=mensagem)
+    if estado == "lendo":
+        return jsonify(ok=False, erro=f"Aguarde: a balança {numero} ainda está sendo lida."), 409
 
+    peso = pesos[etapa]
     try:
         with HARDWARE_LOCK:
-            leitura_bruta = ler_bruto_mediana(numero)
-            tara = BALANCAS[numero]["tara"]
-            fator = (leitura_bruta - tara) / peso_conhecido
-            if fator == 0:
-                raise ValueError("fator calculado igual a zero (o peso está na balança?)")
-            leitura = bl.calculo_peso(tara, leitura_bruta, fator)
+            leitura = float(bl.retarar_balanca(numero))
     except Exception as erro:
-        registrar_status(f"Erro ao calibrar a balança {numero}: {erro}. Clique de novo para tentar outra vez.")
+        with CALIBRACAO_LOCK:
+            if calibracao_ainda_ativa(numero, "lendo", inicio):
+                CALIBRACAO[numero] = "aguardando_peso"
+        registrar_status(
+            f"Erro ao ler a balança {numero} no {etapa + 1}º peso: {erro}. Clique de novo para repetir esta etapa."
+        )
         return jsonify(ok=False, erro=str(erro)), 500
+
     with CALIBRACAO_LOCK:
-        #so grava o fator se a calibracao nao foi cancelada durante a leitura
-        if not calibracao_ainda_ativa(numero, "aguardando_peso", inicio):
+        #so registra o ponto se a calibracao nao foi cancelada durante a leitura
+        if not calibracao_ainda_ativa(numero, "lendo", inicio):
             return jsonify(ok=False, erro=f"A calibração da balança {numero} foi cancelada."), 409
-        BALANCAS[numero]["fator"] = fator
-        CALIBRACAO[numero] = None
-    registrar_status(f"Balança {numero} calibrada (fator {fator:.3f}).")
-    return jsonify(ok=True, leitura=leitura, fator=fator)
+        CALIBRACAO_LEITURAS[numero].append(leitura)
+        leituras = list(CALIBRACAO_LEITURAS[numero])
+        if len(leituras) < len(pesos):
+            CALIBRACAO[numero] = "aguardando_peso"
+            proximo = pesos[len(leituras)]
+            mensagem = (
+                f"Balança {numero}: {etapa + 1}º peso ({peso:g} kg) registrado. "
+                f"Coloque o {len(leituras) + 1}º peso ({proximo:g} kg) e clique em Registrar peso."
+            )
+        else:
+            CALIBRACAO[numero] = None
+            CALIBRACAO_LEITURAS[numero] = []
+            mensagem = None
+    if mensagem:
+        registrar_status(mensagem)
+        return jsonify(ok=True, etapa=len(leituras), mensagem=mensagem)
+
+    try:
+        fator, salvo = concluir_calibracao(numero, leituras)
+    except Exception as erro:
+        registrar_status(f"Falha na calibração da balança {numero}: {erro}. O fator anterior foi mantido.")
+        return jsonify(ok=False, erro=str(erro)), 500
+    aviso = "" if salvo else " Atenção: o fator não pôde ser salvo no config.py e vale só até reiniciar."
+    registrar_status(f"Balança {numero} calibrada (fator {fator:.3f}).{aviso}")
+    return jsonify(ok=True, concluida=True, fator=fator, salvo=salvo)
 
 
 @app.post("/api/calibrar/<int:numero>/cancelar")
@@ -254,6 +263,7 @@ def api_calibrar_cancelar(numero):
     with CALIBRACAO_LOCK:
         estado = CALIBRACAO[numero]
         CALIBRACAO[numero] = None
+        CALIBRACAO_LEITURAS[numero] = []
     if estado is None:
         return jsonify(ok=False, erro=f"Nenhuma calibração da balança {numero} em andamento."), 409
     registrar_status(f"Calibração da balança {numero} cancelada pelo site. O fator anterior foi mantido.")
