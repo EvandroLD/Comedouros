@@ -12,16 +12,17 @@ import notificacoes as nt
 import web_app as web
 
 parar = threading.Event() #sistema para desligar todas as threads
-
+INTERVALO_LEITURA_PESOS = 0.5
 
 
 def rodar_ciclos(sistemaCocho):
     ultima_recal = 0   
     ultimo_log_pesos = 0
+    
     while not parar.is_set(): #loop principal
 
         #antes só if time.monotonic() - ultimo_log_pesos >= 1:
-        if time.monotonic() - ultima_recal > 30 and not web.calibracao_em_andamento():      
+        if time.monotonic() - ultimo_log_pesos >= INTERVALO_LEITURA_PESOS and not web.calibracao_em_andamento():
             sistemaCocho.print_pesos_reais()
             ultimo_log_pesos = time.monotonic()
 
