@@ -184,8 +184,8 @@ class SistemaCocho:
                                 if peso_racao_despejada > peso_racao:
                                     print(f'{peso_racao_despejada} > {peso_racao}')
                                     break
-                            if (peso_racao_despejada > (0.7*peso_racao)):
-                                print(f'{peso_racao_despejada} > 0.7* {peso_racao}')
+                            if (peso_racao_despejada > (0.9*peso_racao)):
+                                print(f'{peso_racao_despejada} > 0.9* {peso_racao}')
                                 motor._definir_estado_normal(1,"horario", 45)
                             else:
                                 motor._definir_estado_normal(1,"horario", 200)
