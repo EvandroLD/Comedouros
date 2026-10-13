@@ -405,7 +405,8 @@ h1 {
     opacity: 0.55;
 }
 
-input:disabled {
+input:disabled,
+select:disabled {
     cursor: not-allowed;
 }
 
@@ -424,7 +425,8 @@ input:disabled {
     color: var(--texto-suave);
 }
 
-input {
+input,
+select {
     width: 100%;
     font: inherit;
     font-weight: 400;
@@ -437,7 +439,8 @@ input {
     transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-input:focus {
+input:focus,
+select:focus {
     outline: none;
     border-color: var(--primaria);
     box-shadow: 0 0 0 3px var(--primaria-suave);

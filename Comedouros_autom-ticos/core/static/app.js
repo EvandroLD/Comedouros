@@ -107,14 +107,32 @@ async function salvarOvelha(evento) {
     const formulario = evento.target;
     const nome = document.getElementById('nome').value;
     const peso = document.getElementById('peso').value;
+    const tipo = document.getElementById('tipo').value;
     const valor = document.getElementById('valor').value;
     const botao = document.getElementById('btnSalvarOvelha');
-    const resposta = await post('/api/cadastro/salvar', { nome, peso, valor }, botao);
+    const resposta = await post('/api/cadastro/salvar', { nome, peso, tipo, valor }, botao);
     if (resposta.ok) {
         avisar(`${nome} cadastrada`);
         formulario.reset();
+        atualizarTipoRacao();
         atualizar();
     }
+}
+
+// Quantidade de Racao: fixa em kg ou porcentagem do peso do animal
+function atualizarTipoRacao() {
+    const percentual = document.getElementById('tipo').value === 'percentual';
+    const peso = parseFloat(document.getElementById('peso').value);
+    const valor = parseFloat(document.getElementById('valor').value);
+    document.getElementById('rotuloValor').textContent =
+        percentual ? 'Quantidade de Ração (% do peso)' : 'Quantidade de Ração (kg)';
+    let dica = percentual
+        ? 'Porcentagem do peso do animal, ex: 2 = 2% do peso. Acompanha o peso medido na balança.'
+        : 'Quantidade de ração por refeição, em kg.';
+    if (percentual && peso > 0 && valor > 0) {
+        dica += ` Hoje: ${(peso * valor / 100).toFixed(3)} kg.`;
+    }
+    document.getElementById('dicaRacao').textContent = dica;
 }
 
 let estadoCadastroAnterior = null;
@@ -127,14 +145,14 @@ function mostrarCadastro(cadastro) {
     card.dataset.estado = estado;
 
     const liberarCampos = estado === 'tag_nova';
-    for (const id of ['nome', 'peso', 'valor', 'btnSalvarOvelha']) {
+    for (const id of ['nome', 'peso', 'tipo', 'valor', 'btnSalvarOvelha']) {
         document.getElementById(id).disabled = !liberarCampos;
     }
 
     if (estado === 'aguardando_tag') {
         texto.textContent = 'Aguardando tag… Aproxime a tag do animal do leitor.';
     } else if (estado === 'tag_nova') {
-        texto.innerHTML = 'Tag nova reconhecida. Digite o nome, o peso e o valor.<br>';
+        texto.innerHTML = 'Tag nova reconhecida. Digite o nome, o peso e a quantidade de ração.<br>';
         const tag = document.createElement('span');
         tag.className = 'cadastro-tag';
         tag.textContent = cadastro.tag;
@@ -232,3 +250,6 @@ async function atualizar() {
 
 setInterval(atualizar, 1000);
 atualizar();
+for (const id of ['peso', 'valor']) {
+    document.getElementById(id).addEventListener('input', atualizarTipoRacao);
+}

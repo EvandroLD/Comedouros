@@ -105,11 +105,21 @@
                             <span>Peso (kg)</span>
                             <input id="peso" type="number" step="0.01" min="0" inputmode="decimal" required disabled>
                         </label>
+                    </div>
+                    <div class="linha">
                         <label class="campo">
-                            <span>Valor</span>
+                            <span>Tipo de quantidade</span>
+                            <select id="tipo" onchange="atualizarTipoRacao()" disabled>
+                                <option value="fixo">Quantidade fixa (kg)</option>
+                                <option value="percentual">% do peso do animal</option>
+                            </select>
+                        </label>
+                        <label class="campo">
+                            <span id="rotuloValor">Quantidade de Ração (kg)</span>
                             <input id="valor" type="number" step="any" min="0" inputmode="decimal" required disabled>
                         </label>
                     </div>
+                    <p class="dica" id="dicaRacao">Quantidade de ração por refeição, em kg.</p>
                     <button class="btn" type="submit" id="btnSalvarOvelha" disabled>Salvar</button>
                 </form>
 
