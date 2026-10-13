@@ -1,0 +1,72 @@
+// t1 - ciclo de alimentacao (main.rodar_ciclos + maquina_estados.SistemaCocho)
+digraph Ciclo {
+  graph [fontname="DejaVu Sans", rankdir=TB, newrank=true, nodesep=0.4, ranksep=0.5, pad=0.3, bgcolor="white"];
+  node  [fontname="DejaVu Sans", shape=box, style="rounded,filled", fontsize=12, penwidth=1.3, margin="0.15,0.07"];
+  edge  [fontname="DejaVu Sans", fontsize=10, color="#444444", arrowsize=0.7];
+
+  inicio [shape=circle, label="", width=0.25, style=filled, fillcolor=black];
+  INIT [fillcolor="#e8e8e8", label=<<B>INICIALIZAÇÃO</B><BR/><FONT POINT-SIZE="10">configurar_cocho(): GPIO sensores e botões, leitor RFID,<BR/>tag_info.csv / relatorio_cocho.csv, motores (teste motor 2 por 1 s),<BR/>setup + tara das balanças 1 e 2</FONT>>];
+  FORK [shape=box, style="filled", fillcolor="#333333", fontcolor=white, fontsize=11, height=0.1, label="inicia threads  t1 ciclo · t2 Sheets · t3 botões · t4 site"];
+  DESLIGAR [fillcolor="#e8e8e8", label=<<B>DESLIGANDO</B><BR/><FONT POINT-SIZE="10">parar.set(); motores 1 e 2 parados; GPIO.cleanup()</FONT>>];
+  FIM [shape=doublecircle, label="", width=0.2, style=filled, fillcolor=black];
+  inicio -> INIT -> FORK;
+  INIT -> DESLIGAR [label="Ctrl+C", style=dashed];
+  DESLIGAR -> FIM;
+  { rank=same; INIT; DESLIGAR; }
+
+  subgraph cluster_ciclo {
+    label=<<B>t1 · Ciclo de alimentação</B>   <FONT POINT-SIZE="11">main.rodar_ciclos + SistemaCocho.executar_um_ciclo</FONT>>;
+    fontsize=18; style="rounded,filled"; fillcolor="#eef5ff"; color="#3a6fb0"; penwidth=2; margin=16;
+    node [fillcolor="#ffffff", color="#3a6fb0"];
+
+    OCIOSO [fillcolor="#d6e6fb", label=<<B>OCIOSO</B><BR/><FONT POINT-SIZE="10">a cada 0,5 s: log dos pesos (se não há calibração pelo site)<BR/>poll do sensor 1 a cada 50 ms</FONT>>];
+    TARA   [label=<<B>RETARANDO</B><BR/><FONT POINT-SIZE="10">sensores 1 e 2 livres ⟹<BR/>nova tara das balanças 1 e 2</FONT>>];
+    PAUSA  [label=<<B>ALIMENTAÇÃO PAUSADA</B><BR/><FONT POINT-SIZE="10">USO_COCHO ocupado pelo<BR/>cadastro do site; espera 0,5 s</FONT>>];
+    RFID   [label=<<B>LENDO RFID</B><BR/><FONT POINT-SIZE="10">ler_tags(timeout 5 s)<BR/>ignora TAGS_RFID_IGNORADAS</FONT>>];
+    INTERVALO [shape=diamond, style="filled", fillcolor="#fff7d6", label=<<B>Já comeu<BR/>nas últimas 24 h?</B><BR/><FONT POINT-SIZE="9">tag mestra: sempre não</FONT>>];
+    BLOQ   [fillcolor="#fde2e2", label=<<B>BLOQUEADO</B><BR/><FONT POINT-SIZE="10">Telegram: bloqueio<BR/>aguarda sensor 1 livre<BR/>resultado: peso −2, ração 0</FONT>>];
+    VALIDA [shape=diamond, style="filled", fillcolor="#fff7d6", label=<<B>Meta de ração<BR/>(coluna valor) válida?</B>>];
+    CANCEL [fillcolor="#fde2e2", label=<<B>CANCELADO</B><BR/><FONT POINT-SIZE="10">aguarda sensor 1 livre<BR/>retorna None</FONT>>];
+    RAPIDO [label=<<B>DESPEJO RÁPIDO</B><BR/><FONT POINT-SIZE="10">motor 1 horário, PWM 200<BR/>lê balança 1 (ração)</FONT>>];
+    LENTO  [label=<<B>DESPEJO LENTO</B><BR/><FONT POINT-SIZE="10">motor 1 horário, PWM 45<BR/>lê balança 1 (ração)</FONT>>];
+    RETORNO [fillcolor="#fff0dc", label=<<B>AGUARDANDO RETORNO</B><BR/><FONT POINT-SIZE="10">motor 1 parado<BR/>espera o animal por até 30 s</FONT>>];
+    PESANDO [label=<<B>PESANDO ANIMAL</B><BR/><FONT POINT-SIZE="10">motor 1 parado; motor 2 horário, PWM 255<BR/>10 leituras da balança 2 → mediana<BR/>&lt; 3 leituras ou desvio &gt; 20% do peso anterior ⟹ −1<BR/>espera 7 s; motor 2 parado</FONT>>];
+    SAIDA  [label=<<B>AGUARDANDO SAÍDA</B><BR/><FONT POINT-SIZE="10">aguarda sensor 1 livre<BR/>calcula tempo no cocho</FONT>>];
+    REG    [fillcolor="#dff3e3", label=<<B>REGISTRANDO</B><BR/><FONT POINT-SIZE="10">Telegram: relatório da alimentação<BR/>nova linha em relatorio_cocho.csv<BR/>peso &gt; −1 ⟹ atualiza peso no tag_info.csv</FONT>>];
+    ERRO   [fillcolor="#fde2e2", label=<<B>ERRO</B><BR/><FONT POINT-SIZE="10">qualquer exceção no ciclo:<BR/>traceback, retorna None</FONT>>];
+
+    OCIOSO -> TARA [label="30 s desde a última tara\n[sem calibração pelo site]"];
+    TARA -> OCIOSO;
+    OCIOSO -> PAUSA [label="presença no sensor 1\n[USO_COCHO ocupado]"];
+    PAUSA -> OCIOSO;
+    OCIOSO -> RFID [label="presença confirmada no sensor 1 (0,5 s)\n[USO_COCHO livre] / trava USO_COCHO", penwidth=2.2, color="#3a6fb0"];
+    RFID -> RFID [label="sem tag ou\ntag não cadastrada"];
+    RFID -> OCIOSO [label="animal saiu sem tag\n/ libera USO_COCHO", style=dashed];
+    RFID -> INTERVALO [label="tag cadastrada", penwidth=2.2, color="#3a6fb0"];
+    INTERVALO -> BLOQ [label="sim"];
+    INTERVALO -> VALIDA [label="não / Telegram: subida", penwidth=2.2, color="#3a6fb0"];
+    VALIDA -> CANCEL [label="não (vazia ou ≤ 0)"];
+    VALIDA -> RAPIDO [label="sim", penwidth=2.2, color="#3a6fb0"];
+    RAPIDO -> LENTO [label="ração > 90% da meta", penwidth=2.2, color="#3a6fb0"];
+    RAPIDO -> RETORNO [label="animal saiu"];
+    LENTO -> RETORNO [label="animal saiu"];
+    RETORNO -> RAPIDO [label="voltou [< 90%]"];
+    RETORNO -> LENTO [label="voltou [> 90%]"];
+    RAPIDO -> PESANDO [label="ração > meta"];
+    LENTO -> PESANDO [label="ração > meta", penwidth=2.2, color="#3a6fb0"];
+    RETORNO -> PESANDO [label="30 s sem retorno"];
+    PESANDO -> SAIDA [penwidth=2.2, color="#3a6fb0"];
+    SAIDA -> REG [penwidth=2.2, color="#3a6fb0"];
+    BLOQ -> REG;
+    REG -> OCIOSO [label="libera USO_COCHO", penwidth=2.2, color="#3a6fb0", constraint=false];
+    CANCEL -> OCIOSO [label="libera USO_COCHO", style=dashed, constraint=false];
+    ERRO -> OCIOSO [label="libera USO_COCHO", style=dashed, constraint=false];
+
+    { rank=same; TARA; OCIOSO; PAUSA; }
+    { rank=same; BLOQ; VALIDA; }
+    { rank=same; RAPIDO; CANCEL; }
+    { rank=same; REG; ERRO; }
+    SAIDA -> ERRO [style=invis];
+  }
+  FORK -> OCIOSO [label=" t1", penwidth=1.5];
+}

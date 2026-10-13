@@ -1,0 +1,54 @@
+// t3 - botoes fisicos e motores (main.botao, botoes_manual.py, motor.py)
+digraph Botoes {
+  graph [fontname="DejaVu Sans", rankdir=TB, nodesep=0.35, ranksep=0.45, pad=0.3, bgcolor="white"];
+  node  [fontname="DejaVu Sans", shape=box, style="rounded,filled", fontsize=12, penwidth=1.3, margin="0.15,0.07"];
+  edge  [fontname="DejaVu Sans", fontsize=10, color="#444444", arrowsize=0.7];
+  subgraph cluster_botoes {
+    label=<<B>t3 · Botões físicos e motores</B>   <FONT POINT-SIZE="11">botoes_manual.py, motor.py</FONT>>;
+    fontsize=18; style="rounded,filled"; fillcolor="#fff6ea"; color="#c07a1f"; penwidth=2; margin=14;
+    node [fillcolor="#ffffff", color="#c07a1f"];
+
+    subgraph cluster_calfis {
+      label=<<B>Botão de calibração (cada balança)</B>>; fontsize=13; style="rounded,dashed"; margin=12;
+      CF_OFF [fillcolor="#fde9cf", label=<<B>SEM CALIBRAÇÃO</B>>];
+      CF_P1  [label=<<B>AGUARDANDO 1º PESO</B><BR/><FONT POINT-SIZE="10">bal. 1: 0,1 kg · bal. 2: 1,0 kg</FONT>>];
+      CF_P2  [label=<<B>AGUARDANDO 2º PESO</B><BR/><FONT POINT-SIZE="10">bal. 1: 0,2 kg · bal. 2: 2,0 kg</FONT>>];
+      CF_P3  [label=<<B>AGUARDANDO 3º PESO</B><BR/><FONT POINT-SIZE="10">bal. 1: 0,3 kg · bal. 2: 3,0 kg</FONT>>];
+      CF_CALC [label=<<B>CALCULANDO</B><BR/><FONT POINT-SIZE="10">polyfit → fator e tara<BR/>fator válido ⟹ grava no config.py</FONT>>];
+      CF_OFF -> CF_P1 [label="aperto curto\n(age ao soltar)"];
+      CF_P1 -> CF_P2 [label="aperto curto / lê balança\n(erro: repete o ponto)"];
+      CF_P2 -> CF_P3 [label="aperto curto / lê balança"];
+      CF_P3 -> CF_CALC [label="aperto curto / lê balança"];
+      CF_CALC -> CF_OFF [constraint=false];
+      CANCEL_NOTE [shape=note, style=filled, fillcolor="#fde2e2", color="#aa3333", fontsize=10, label="em qualquer etapa:\nsegurar ≥ 5 s ⟶ SEM CALIBRAÇÃO\n(cancela, mantém o fator)"];
+      CF_P2 -> CANCEL_NOTE [style=invis];
+      { rank=same; CF_P2; CANCEL_NOTE; }
+    }
+
+    subgraph cluster_manual {
+      label=<<B>Botão manual (motor 1 e 2)</B>>; fontsize=13; style="rounded,dashed"; margin=12;
+      M_AUTO [fillcolor="#fde9cf", label=<<B>AUTOMÁTICO</B><BR/><FONT POINT-SIZE="10">motor segue o estado<BR/>normal definido pelo t1</FONT>>];
+      M_MAN  [label=<<B>MANUAL</B><BR/><FONT POINT-SIZE="10">estado manual sobrepõe<BR/>o normal: horário, PWM 255</FONT>>];
+      M_AUTO -> M_MAN [label="pressionado"];
+      M_MAN -> M_AUTO [label="solto"];
+    }
+
+    subgraph cluster_destrava {
+      label=<<B>Anti-travamento (motor 1)</B>>; fontsize=13; style="rounded,dashed"; margin=12;
+      D_OK [fillcolor="#fde9cf", label=<<B>MONITORANDO</B><BR/><FONT POINT-SIZE="10">últimas 4 leituras do<BR/>sensor de corrente (LM358)</FONT>>];
+      D_RUN [label=<<B>DESTRAVANDO</B><BR/><FONT POINT-SIZE="10">3× horário 0,5 s / anti-horário 0,5 s<BR/>depois motor 1 parado</FONT>>];
+      D_OK -> D_RUN [label="4 leituras = 1"];
+      D_RUN -> D_OK;
+    }
+  }
+
+  subgraph cluster_sheets {
+    label=<<B>t2 · Sincronização</B>   <FONT POINT-SIZE="11">main.notificar</FONT>>;
+    fontsize=18; style="rounded,filled"; fillcolor="#eaf7ee"; color="#2f8a4a"; penwidth=2; margin=14;
+    node [fillcolor="#ffffff", color="#2f8a4a"];
+    S_ESP [fillcolor="#d3efdc", label=<<B>ESPERANDO</B><BR/><FONT POINT-SIZE="10">30 s</FONT>>];
+    S_SYNC [label=<<B>SINCRONIZANDO</B><BR/><FONT POINT-SIZE="10">envia ao Google Sheets as linhas<BR/>do relatorio_cocho.csv que faltam</FONT>>];
+    S_ESP -> S_SYNC [label="30 s"];
+    S_SYNC -> S_ESP;
+  }
+}

@@ -1,0 +1,40 @@
+// t4 - site Flask (web_app.py)
+digraph Site {
+  graph [fontname="DejaVu Sans", rankdir=TB, nodesep=0.35, ranksep=0.45, pad=0.3, bgcolor="white"];
+  node  [fontname="DejaVu Sans", shape=box, style="rounded,filled", fontsize=12, penwidth=1.3, margin="0.15,0.07"];
+  edge  [fontname="DejaVu Sans", fontsize=10, color="#444444", arrowsize=0.7];
+  subgraph cluster_site {
+    label=<<B>t4 · Site Flask</B>   <FONT POINT-SIZE="11">web_app.py</FONT>>;
+    fontsize=18; style="rounded,filled"; fillcolor="#f3ecfb"; color="#7a4fb0"; penwidth=2; margin=14;
+    node [fillcolor="#ffffff", color="#7a4fb0"];
+
+    subgraph cluster_cad {
+      label=<<B>Cadastro de ovelhas (RFID)</B>>; fontsize=13; style="rounded,dashed"; margin=12;
+      C_INAT [fillcolor="#e6d9f7", label=<<B>inativo</B><BR/><FONT POINT-SIZE="10">alimentação liberada</FONT>>];
+      C_AG   [label=<<B>aguardando_tag</B><BR/><FONT POINT-SIZE="10">segura USO_COCHO (t1 pausado)<BR/>lê RFID a cada 1 s</FONT>>];
+      C_NOVA [label=<<B>tag_nova</B><BR/><FONT POINT-SIZE="10">espera nome, peso e valor</FONT>>];
+      C_INAT -> C_AG [label="iniciar\n[leitor ok e\nUSO_COCHO livre]"];
+      C_AG -> C_AG [label="tag já\ncadastrada"];
+      C_AG -> C_NOVA [label="tag nova lida"];
+      C_NOVA -> C_AG [label="salvar\n/ grava tag_info.csv"];
+      C_AG -> C_INAT [label="finalizar ou\n10 min ocioso\n/ libera USO_COCHO", style=dashed, constraint=false];
+      C_NOVA -> C_INAT [label="finalizar ou\n10 min ocioso", style=dashed, constraint=false];
+    }
+
+    subgraph cluster_calweb {
+      label=<<B>Calibração pelo site (cada balança)</B>>; fontsize=13; style="rounded,dashed"; margin=12;
+      W_NONE [fillcolor="#e6d9f7", label=<<B>None</B><BR/><FONT POINT-SIZE="10">tara automática do t1 ativa</FONT>>];
+      W_AG   [label=<<B>aguardando_peso</B><BR/><FONT POINT-SIZE="10">etapa 0, 1 ou 2<BR/>t1 suspende tara e log</FONT>>];
+      W_LE   [label=<<B>lendo</B><BR/><FONT POINT-SIZE="10">lê a balança com<BR/>o peso da etapa</FONT>>];
+      W_CONC [label=<<B>concluindo</B><BR/><FONT POINT-SIZE="10">polyfit → fator e tara<BR/>grava no config.py</FONT>>];
+      W_NONE -> W_AG [label="clique\n/ etapa = 0"];
+      W_AG -> W_LE [label="clique"];
+      W_LE -> W_AG [label="ponto registrado [etapa < 3]\nou erro de leitura"];
+      W_LE -> W_CONC [label="3º ponto"];
+      W_CONC -> W_NONE [constraint=false];
+      W_AG -> W_NONE [label="cancelar ou\n10 min sem concluir", style=dashed, constraint=false];
+    }
+
+    W_MOTOR [label=<<B>Ações diretas</B><BR/><FONT POINT-SIZE="10">ligar motor N → estado manual<BR/>parar motor N → libera manual<BR/>reiniciar → sudo reboot</FONT>>];
+  }
+}
