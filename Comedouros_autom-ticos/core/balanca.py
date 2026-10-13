@@ -193,17 +193,6 @@ def teste_hx(dt,sck):
     finally:
         GPIO.cleanup()
 
-def mediana_buffer(buffer_peso, peso):
-    if len(buffer_peso)>5:
-        buffer_peso.pop(0)
-        buffer_peso.append(peso)
-        peso     = np.median(buffer_peso)
-        return peso
-    else:
-        buffer_peso.append(peso)
-        return None
-
-
 #main de teste apenas para ver se estamos recebendo dados do HX
 def main():
     # Evita que o terminal fique jogando warnings na tela
@@ -219,17 +208,10 @@ def main():
 
     leituras = []
     try:
-        buffer_peso1 = []
-        buffer_peso2 = []
         while True:
             
             peso1, bruto1 = ler_peso(1)
             peso2, bruto2 = ler_peso(2)
-
-            if peso1 is not None:
-                peso1 = mediana_buffer(buffer_peso1, peso1)
-            if peso2 is not None:
-                peso2 = mediana_buffer(buffer_peso2, peso2)
 
             leituras.append([peso1, bruto1, peso2, bruto2])
             # Garante que não vai dar erro se a leitura falhar

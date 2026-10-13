@@ -44,6 +44,9 @@ BALANCAS = {
 
 # Pesos conhecidas usadas nos tres apertos do botao de recalibracao, em kg.
 # Altere estes valores para corresponder aos pesos realmente colocados.
+# Segurar o botao de calibracao por esse tempo (s) cancela a calibracao em andamento.
+TEMPO_CANCELAR_CALIBRACAO = 5
+
 PESOS_CALIBRACAO_KG = {
     1: (0.1, 0.2, 0.3),
     2: (1.0, 2.0, 3.0),

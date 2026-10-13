@@ -15,7 +15,6 @@ class SistemaCocho:
     def __init__(self):
         self.leitor_rfid = None
         self.tag_info = None
-        self.peso_racao_buffer = []
         self.relatorio_csv = None
 
 
@@ -94,7 +93,6 @@ class SistemaCocho:
         """
 
         tag = nome_animal = saida = peso_racao_despejada = minutos = segundos = peso_animal_atual = 0
-        self.peso_racao_buffer = []
         peso_animal_buffer = []
         peso_racao_despejada = 0
         entrada = time.ctime()
@@ -181,12 +179,9 @@ class SistemaCocho:
 
                             peso1, _ = bl.ler_peso(1)
                             if peso1 is not None:
-                                self.peso_racao_buffer.append(peso1)
-
-                            if len(self.peso_racao_buffer) > 5:
-                                self.peso_racao_buffer.pop(0)
+                                peso_racao_despejada = peso1
                                 print(f'lendo peso despejado {peso_racao_despejada}')
-                                if (peso_racao_despejada:= np.median(self.peso_racao_buffer)) > peso_racao:
+                                if peso_racao_despejada > peso_racao:
                                     print(f'{peso_racao_despejada} > {peso_racao}')
                                     break
                             if (peso_racao_despejada > (0.7*peso_racao)):

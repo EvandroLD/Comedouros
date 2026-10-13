@@ -15,6 +15,8 @@ except Exception:
 
 
 _calibracoes = {}
+_inicio_aperto = {}             # balanca -> momento (monotonic) em que o botao foi apertado
+_cancelada_neste_aperto = set() # balancas cuja calibracao ja foi cancelada no aperto atual
 
 
 def _avisar(mensagem):
@@ -53,13 +55,52 @@ def setup_botoes():
 
 
 def calibrar(balanca, estado_anterior):
+    """Botao de calibracao:
+    - aperto curto (solto antes de TEMPO_CANCELAR_CALIBRACAO): inicia a calibracao ou
+      registra o proximo peso. A acao acontece ao SOLTAR o botao, para nao registrar um
+      ponto quando a intencao e segurar para cancelar.
+    - segurar por TEMPO_CANCELAR_CALIBRACAO com uma calibracao em andamento: cancela,
+      descartando os pontos ja lidos e mantendo o fator anterior.
+    """
     pino_botao = BOTAO_CALIBRAR1 if balanca == 1 else BOTAO_CALIBRAR2
 
     estado_atual = GPIO.input(pino_botao)
+    agora = time.monotonic()
 
-    if estado_atual != BOTAO_PRESSIONADO or estado_atual == estado_anterior:
+    if estado_atual == BOTAO_PRESSIONADO:
+        if estado_anterior != BOTAO_PRESSIONADO:
+            _inicio_aperto[balanca] = agora
+        elif (
+            balanca in _calibracoes
+            and balanca not in _cancelada_neste_aperto
+            and agora - _inicio_aperto.get(balanca, agora) >= TEMPO_CANCELAR_CALIBRACAO
+        ):
+            _calibracoes.pop(balanca, None)
+            _cancelada_neste_aperto.add(balanca)
+            _avisar(
+                f"Calibração da balança {balanca} cancelada (botão mantido por "
+                f"{TEMPO_CANCELAR_CALIBRACAO} s). O fator anterior foi mantido. Pode soltar o botão."
+            )
         return estado_atual
 
+    # Botao solto: so age na borda de soltura
+    if estado_anterior != BOTAO_PRESSIONADO:
+        return estado_atual
+
+    inicio = _inicio_aperto.pop(balanca, agora)
+    if balanca in _cancelada_neste_aperto:
+        _cancelada_neste_aperto.discard(balanca)
+        return estado_atual
+    if agora - inicio >= TEMPO_CANCELAR_CALIBRACAO:
+        _avisar(f"Nenhuma calibração da balança {balanca} em andamento para cancelar.")
+        return estado_atual
+
+    _registrar_aperto_calibracao(balanca)
+    return estado_atual
+
+
+def _registrar_aperto_calibracao(balanca):
+    """Aperto curto: inicia a calibracao ou registra o proximo dos tres pesos."""
     calibracao = _calibracoes.setdefault(
         balanca,
         {"iniciada": False, "leituras": []},
@@ -70,9 +111,10 @@ def calibrar(balanca, estado_anterior):
         calibracao["pesos"] = PESOS_CALIBRACAO_KG[balanca]
         _avisar(
             f"Botão de calibração da balança {balanca} pressionado: calibração iniciada. "
-            f"Coloque o 1º peso ({calibracao['pesos'][0]} kg) e aperte novamente."
+            f"Coloque o 1º peso ({calibracao['pesos'][0]} kg) e aperte novamente. "
+            f"Para cancelar, segure o botão por {TEMPO_CANCELAR_CALIBRACAO} s."
         )
-        return estado_atual
+        return
 
     numero_ponto = len(calibracao["leituras"])
     peso_atual = calibracao["pesos"][numero_ponto]
@@ -84,7 +126,7 @@ def calibrar(balanca, estado_anterior):
             f"Erro ao ler a balança {balanca} no {numero_ponto + 1}º peso: {erro}. "
             "Aperte o botão novamente para repetir este ponto."
         )
-        return estado_atual
+        return
 
     calibracao["leituras"].append(float(leitura))
 
@@ -94,7 +136,7 @@ def calibrar(balanca, estado_anterior):
             f"Balança {balanca}: {numero_ponto + 1}º peso ({peso_atual} kg) registrado. "
             f"Coloque o próximo peso ({proximo} kg) e aperte novamente."
         )
-        return estado_atual
+        return
 
     pesos = np.asarray(calibracao["pesos"], dtype=float)
     leituras = np.asarray(calibracao["leituras"], dtype=float)
@@ -110,7 +152,6 @@ def calibrar(balanca, estado_anterior):
         _avisar(f"Falha ao salvar o fator da balança {balanca}.")
 
     _calibracoes.pop(balanca, None)
-    return estado_atual
 
 
 if __name__ == "__main__":

@@ -47,37 +47,42 @@ async function parar(numero, botao) {
     atualizar();
 }
 
-// Calibracao em dois passos, igual nas duas balancas:
-// 1o clique zera a balanca; 2o clique (com o peso conhecido em cima) calcula o fator
+// Calibracao em tres etapas (pesos definidos no config.py, ex: 0.1, 0.2 e 0.3 kg):
+// o mesmo botao inicia a calibracao e registra cada peso; o outro botao cancela
 async function calibrar(numero, botao) {
-    const peso = Number(document.getElementById(`pesoCalibracao${numero}`).value);
-    if (!peso) {
-        avisar(`Informe o peso conhecido da balança ${numero}`, 'erro');
-        return;
-    }
-    const resposta = await post(`/api/calibrar/${numero}`, { peso }, botao);
-    if (resposta.mensagem) {
-        avisar(resposta.mensagem, 'ok', 8000);
-    } else if (resposta.ok) {
+    const resposta = await post(`/api/calibrar/${numero}`, {}, botao);
+    if (resposta.concluida) {
         avisar(`Balança ${numero} calibrada (fator ${resposta.fator.toFixed(3)})`);
+        if (!resposta.salvo) avisar('O fator não pôde ser salvo no config.py', 'erro', 8000);
+    } else if (resposta.mensagem) {
+        avisar(resposta.mensagem, 'ok', 8000);
     }
     atualizar();
 }
 
-// estado: null | "zerando" | "aguardando_peso"
-function mostrarCalibracao(numero, estado) {
+async function cancelarCalibracao(numero, botao) {
+    const resposta = await post(`/api/calibrar/${numero}/cancelar`, {}, botao);
+    if (resposta.ok) avisar(`Calibração da balança ${numero} cancelada`);
+    atualizar();
+}
+
+// calibracao: { estado: null | "aguardando_peso" | "lendo", etapa, pesos }
+function mostrarCalibracao(numero, calibracao) {
+    const { estado = null, etapa = 0, pesos = [] } = calibracao || {};
     const bloco = document.getElementById(`calibracao${numero}`);
     const dica = document.getElementById(`calibracaoDica${numero}`);
     const botao = document.getElementById(`btnCalibrar${numero}`);
+    const total = pesos.length;
+    const peso = pesos[etapa];
     bloco.dataset.estado = estado || '';
-    if (estado === 'zerando') {
-        dica.textContent = `Zerando a balança ${numero}… mantenha sem peso.`;
-        botao.textContent = 'Zerando…';
+    if (estado === 'lendo') {
+        dica.textContent = `Etapa ${etapa + 1} de ${total}: lendo a balança ${numero}… não mexa no peso.`;
+        botao.textContent = 'Lendo…';
     } else if (estado === 'aguardando_peso') {
-        dica.textContent = `Coloque o peso conhecido na balança ${numero} e clique em Concluir.`;
-        botao.textContent = 'Concluir calibração';
+        dica.textContent = `Etapa ${etapa + 1} de ${total}: coloque o peso de ${peso} kg na balança ${numero} e clique em Registrar peso.`;
+        botao.textContent = `Registrar peso (${peso} kg)`;
     } else {
-        dica.textContent = `Balança ${numero}: clique uma vez sem peso, depois coloque o peso conhecido e clique de novo.`;
+        dica.textContent = `Balança ${numero}: clique em Calibrar balança ${numero} e siga as ${total || 3} etapas (${pesos.join(', ')} kg).`;
         botao.textContent = `Calibrar balança ${numero}`;
     }
 }
