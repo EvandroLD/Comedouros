@@ -2,6 +2,8 @@ import os
 import csv
 import logging
 import time
+import queue
+import threading
 from pathlib import Path
 import requests
 
@@ -97,9 +99,57 @@ def _escapar_markdown(texto: str) -> str:
         texto_str = texto_str.replace(char, f"\\{char}")
     return texto_str
 
+#mensagens esperando envio; o loop do cocho so coloca aqui e segue, quem envia e a thread rodar_envio_telegram
+FILA_TELEGRAM = queue.Queue(maxsize=100)
+TENTATIVAS_ENVIO_TELEGRAM = 3
+#(conectar, esperar resposta) em segundos
+TIMEOUT_TELEGRAM = (3, 5)
+
+#reaproveita a conexao HTTPS entre as mensagens (so a thread do Telegram usa)
+_sessao_telegram = requests.Session()
+
+
 def enviar_alerta_telegram(mensagem):
     """
-    Função base que envia uma mensagem de alerta para o Telegram.
+    Coloca a mensagem na fila do Telegram e retorna na hora, sem esperar a internet.
+    O envio de verdade é feito pela thread rodar_envio_telegram.
+    """
+    try:
+        FILA_TELEGRAM.put_nowait(mensagem)
+        return True
+    except queue.Full:
+        logging.error("Fila do Telegram cheia; mensagem descartada.")
+        return False
+
+
+def rodar_envio_telegram(parar):
+    """
+    Loop da thread do Telegram: tira as mensagens da fila, na ordem, e envia.
+    Em falha de rede tenta de novo algumas vezes; se o Telegram recusar a mensagem, descarta.
+    """
+    while not parar.is_set():
+        try:
+            mensagem = FILA_TELEGRAM.get(timeout=1)
+        except queue.Empty:
+            continue
+
+        try:
+            for tentativa in range(1, TENTATIVAS_ENVIO_TELEGRAM + 1):
+                resultado = _postar_telegram(mensagem)
+                if resultado is not None: #enviado (True) ou recusado (False): nao adianta repetir
+                    break
+                if tentativa < TENTATIVAS_ENVIO_TELEGRAM and parar.wait(2 * tentativa):
+                    break
+            else:
+                logging.error("Telegram sem conexão; mensagem descartada após %s tentativas.", TENTATIVAS_ENVIO_TELEGRAM)
+        finally:
+            FILA_TELEGRAM.task_done()
+
+
+def _postar_telegram(mensagem):
+    """
+    Envia a mensagem para o Telegram (bloqueia; só deve rodar na thread do Telegram).
+    Retorna True se enviou, False se o Telegram recusou e None em falha de rede.
     """
     token = (os.environ.get("TELEGRAM_BOT_TOKEN") or BOT_TOKEN).strip()
     chat_id = (os.environ.get("TELEGRAM_CHAT_ID") or CHAT_ID).strip()
@@ -124,7 +174,12 @@ def enviar_alerta_telegram(mensagem):
     }
     
     try:
-        response = requests.post(url, data=payload, timeout=10)
+        response = _sessao_telegram.post(url, data=payload, timeout=TIMEOUT_TELEGRAM)
+    except requests.RequestException as e:
+        logging.error(f"Erro de conexão ao tentar enviar alerta para o Telegram: {e}")
+        return None
+
+    try:
         resposta = response.json()
         if response.status_code == 200 and resposta.get("ok") is True:
             logging.info("Alerta enviado com sucesso para o Telegram.")
@@ -136,8 +191,8 @@ def enviar_alerta_telegram(mensagem):
                 resposta,
             )
             return False
-    except Exception as e:
-        logging.error(f"Erro de conexão ao tentar enviar alerta para o Telegram: {e}")
+    except ValueError as e:
+        logging.error(f"Resposta inválida do Telegram (status {response.status_code}): {e}")
         return False
 
 def notificar_subida_animal(tag_id):
@@ -351,18 +406,14 @@ async def enviar_log_telegram(caminho_arquivo=LOG_FILE_PATH):
 
 
 if __name__ == '__main__':
-    print("Enviando mensagem de teste de SUBIDA para o Telegram...")
-    sucesso_subida = notificar_subida_animal('49C33000E280699500005014D639954A')
-    if sucesso_subida:
-        print("Mensagem de SUBIDA enviada com sucesso!")
-    else:
-        print("Falha ao enviar mensagem de SUBIDA.")
-    
-    time.sleep(2)
+    logging.basicConfig(level=logging.INFO)
+    parar = threading.Event()
+    threading.Thread(target=rodar_envio_telegram, args=(parar,), daemon=True).start()
 
-    print("\nEnviando mensagem de teste de DESCIDA para o Telegram...")
-    sucesso_descida = notificar_descida_animal('49C33000E280699500005014D639954A', "5m 32s")
-    if sucesso_descida:
-        print("Mensagem de DESCIDA enviada com sucesso! Verifique seu Telegram.")
-    else:
-        print("Falha ao enviar mensagem de DESCIDA.")
+    print("Colocando na fila as mensagens de teste de SUBIDA e DESCIDA...")
+    notificar_subida_animal('49C33000E280699500005014D639954A')
+    notificar_descida_animal('49C33000E280699500005014D639954A', "5m 32s")
+
+    FILA_TELEGRAM.join() #espera a thread enviar tudo
+    parar.set()
+    print("Fila do Telegram vazia. Verifique o Telegram (e o log acima em caso de falha).")

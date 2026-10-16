@@ -132,6 +132,7 @@ if __name__ == "__main__":
     #FOI ACRESCENTADO
     web.configurar_leitor_rfid(sistemaCocho.leitor_rfid) #o site usa o mesmo leitor no cadastro de ovelhas
     t4 = threading.Thread(target=rodar_site, args=(), daemon = True) #site: encerra junto com o programa
+    t5 = threading.Thread(target=nt.rodar_envio_telegram, args=(parar,), daemon = True) #envia o Telegram sem travar o ciclo do cocho
 
 # Iniciando as threads
 
@@ -139,6 +140,7 @@ if __name__ == "__main__":
     t2.start()
     t3.start()
     t4.start()
+    t5.start()
     print(f"Site disponivel em http://<ip-da-raspberry>:{web.PORTA_SITE}")
 
     try:
@@ -151,4 +153,5 @@ if __name__ == "__main__":
     t1.join(timeout=3)
     t2.join(timeout=3)
     t3.join(timeout=3)
+    t5.join(timeout=3)
     desligar()
