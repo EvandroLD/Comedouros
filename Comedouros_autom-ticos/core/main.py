@@ -27,10 +27,9 @@ def rodar_ciclos(sistemaCocho):
             ultimo_log_pesos = time.monotonic()
 
         #a cada 30s; pula enquanto o site calibra, para nao tirar a tara com o peso de calibracao em cima
-        if time.monotonic() - ultima_recal > 30 and not web.calibracao_em_andamento():
+        if time.monotonic() - ultima_recal > 300 and not web.calibracao_em_andamento():
             sistemaCocho.recalibrar_balanca_sem_presenca() #enquanto não há vacas no cocho, o sistema fica recalibrando a balança
             ultima_recal = time.monotonic()
-
 
             #FOI TROCADO 
         if sr.confirmar_presenca_sensor('1'): #se tiver vacas no sensor 1, o ciclo se inicia
@@ -38,6 +37,7 @@ def rodar_ciclos(sistemaCocho):
             if not web.USO_COCHO.acquire(blocking=False):
                 parar.wait(0.5)
                 continue
+
             try:
                 print("presença confirmada no sensor 1, entrando no ciclo cocho")
                 resposta = sistemaCocho.executar_um_ciclo()
@@ -133,12 +133,15 @@ if __name__ == "__main__":
     web.configurar_leitor_rfid(sistemaCocho.leitor_rfid) #o site usa o mesmo leitor no cadastro de ovelhas
     t4 = threading.Thread(target=rodar_site, args=(), daemon = True) #site: encerra junto com o programa
 
+    t5 = threading.Thread(target=nt.rodar_envio_telegram, args=(parar,), daemon = True) #envia o Telegram sem travar o ciclo do cocho
+
 # Iniciando as threads
 
     t1.start()
     t2.start()
     t3.start()
     t4.start()
+    t5.start()
     print(f"Site disponivel em http://<ip-da-raspberry>:{web.PORTA_SITE}")
 
     try:
@@ -151,4 +154,6 @@ if __name__ == "__main__":
     t1.join(timeout=3)
     t2.join(timeout=3)
     t3.join(timeout=3)
+    t4.join(timeout=3)
+    t5.join(timeout=3)
     desligar()
