@@ -12,6 +12,8 @@ from werkzeug.exceptions import HTTPException
 import RPi.GPIO as GPIO
 import numpy as np
 
+import logs_terminal
+logs_terminal.instalar() #antes do logging.basicConfig, para o logging tambem ir para o site
 import balanca as bl
 import leitor_fonkan as rfid
 import motor
@@ -182,6 +184,12 @@ def concluir_calibracao(numero, leituras):
 @app.get("/api/status")
 def api_status():
     return jsonify(status_atual())
+
+
+@app.get("/api/terminal")
+def api_terminal():
+    """Saida do terminal da Raspberry e do servico do systemd, so as linhas depois de `desde`."""
+    return jsonify(logs_terminal.linhas_desde(request.args.get("desde", 0, type=int)))
 
 
 @app.post("/api/calibrar/<int:numero>")
@@ -471,6 +479,7 @@ if __name__ == "__main__":
         registrar_status(f"Hardware não inicializado: {erro}")
 
     configurar_leitor_rfid(rfid.iniciar_leitor())
+    logs_terminal.iniciar_leitura_servico()
     threading.Thread(target=ler_balancas_continuamente, daemon=True).start()
 
     app.run(host="0.0.0.0", port=PORTA_SITE)

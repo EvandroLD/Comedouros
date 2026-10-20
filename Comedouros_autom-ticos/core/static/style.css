@@ -533,6 +533,59 @@ select:focus {
     white-space: pre-wrap;
 }
 
+/* ---------- Terminal da Raspberry ---------- */
+
+.terminal-cabecalho {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.terminal-opcao {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    color: var(--texto-suave);
+}
+
+.terminal-balancas {
+    margin: 0 0 8px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--texto-suave);
+}
+
+.terminal-balancas:empty {
+    display: none;
+}
+
+.terminal {
+    height: 320px;
+}
+
+.terminal .linha-hora {
+    opacity: 0.6;
+}
+
+.terminal .linha-servico {
+    color: #9cc8ff;
+}
+
+.terminal .linha-alerta {
+    color: #ffd27a;
+}
+
+.terminal .linha-erro {
+    color: #ff9b8f;
+}
+
+.terminal.so-servico .linha-terminal {
+    display: none;
+}
+
 /* ---------- Zona de perigo ---------- */
 
 .zona-perigo {

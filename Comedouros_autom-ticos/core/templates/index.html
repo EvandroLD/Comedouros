@@ -130,9 +130,17 @@
             </section>
 
             <section class="card card-larga">
-                <h2>Situação</h2>
+                <div class="terminal-cabecalho">
+                    <h2>Situação</h2>
+                    <label class="terminal-opcao">
+                        <input type="checkbox" id="terminalSoServico" onchange="filtrarTerminal()">
+                        Só o serviço
+                    </label>
+                </div>
                 <p id="situacao" class="situacao">Carregando…</p>
-                <pre id="logs" class="logs"></pre>
+                <p id="servico" class="dica">Carregando estado do serviço…</p>
+                <p id="terminalBalancas" class="terminal-balancas"></p>
+                <pre id="terminal" class="logs terminal"></pre>
             </section>
         </div>
 

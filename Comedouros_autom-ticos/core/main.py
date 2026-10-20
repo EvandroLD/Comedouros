@@ -1,3 +1,5 @@
+import logs_terminal
+logs_terminal.instalar() #antes dos outros imports: tudo que for impresso no terminal vai tambem para o site
 import maquina_estados as maq_es
 import time
 import sensor_reflexivo as sr
@@ -89,6 +91,7 @@ def rodar_site():
     """Sobe o site (Flask) em paralelo. O hardware ja foi configurado por configurar_cocho()."""
     try:
         web.registrar_status("Interface pronta")
+        logs_terminal.iniciar_leitura_servico() #journal do novo_comedouro.service na area de logs do site
         #use_reloader=False: o reloader do Flask so funciona na thread principal
         web.app.run(host="0.0.0.0", port=web.PORTA_SITE, debug=False, use_reloader=False, threaded=True)
     except Exception as erro:

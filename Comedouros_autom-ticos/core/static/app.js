@@ -243,13 +243,69 @@ async function atualizar() {
     mostrarCalibracao(2, calibracao['2']);
 
     document.getElementById('situacao').textContent = status.mensagem;
-    document.getElementById('logs').textContent = status.logs.length
-        ? status.logs.join('\n')
-        : 'Nenhum evento ainda.';
+}
+
+// ---------- Terminal da Raspberry (prints, logging e journal do servico) ----------
+
+const LINHAS_TERMINAL = 500;
+let ultimoIdTerminal = 0;
+
+function linhaTerminal({ hora, origem, nivel, texto }) {
+    const linha = document.createElement('span');
+    linha.className = `linha-${origem} linha-${nivel}`;
+    const marcaHora = document.createElement('span');
+    marcaHora.className = 'linha-hora';
+    marcaHora.textContent = `${hora} `;
+    linha.append(marcaHora, `${origem === 'servico' ? '[serviço] ' : ''}${texto}\n`);
+    return linha;
+}
+
+function filtrarTerminal() {
+    const soServico = document.getElementById('terminalSoServico').checked;
+    document.getElementById('terminal').classList.toggle('so-servico', soServico);
+}
+
+function mostrarServico(servico) {
+    const texto = document.getElementById('servico');
+    if (!servico || !servico.disponivel) {
+        texto.textContent = `Serviço ${servico ? servico.nome : ''} não encontrado (o programa não está rodando pelo systemd?).`;
+        return;
+    }
+    const partes = [`${servico.nome}: ${servico.estado} (${servico.subestado})`];
+    if (servico.desde) partes.push(`desde ${servico.desde}`);
+    if (servico.pid && servico.pid !== '0') partes.push(`PID ${servico.pid}`);
+    if (servico.memoria_mb != null) partes.push(`${servico.memoria_mb} MB`);
+    if (servico.reinicios) partes.push(`${servico.reinicios} reinício(s)`);
+    texto.textContent = partes.join(' · ');
+}
+
+async function atualizarTerminal() {
+    let dados;
+    try {
+        const resposta = await fetch(`/api/terminal?desde=${ultimoIdTerminal}`);
+        dados = await resposta.json();
+    } catch (erro) {
+        return;
+    }
+    const terminal = document.getElementById('terminal');
+    // so rola sozinho se o usuario ja estava vendo o fim (nao atrapalha quem subiu para ler)
+    const noFim = terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight < 30;
+    if (dados.recomecar) terminal.replaceChildren();
+    for (const linha of dados.linhas) terminal.appendChild(linhaTerminal(linha));
+    while (terminal.childElementCount > LINHAS_TERMINAL) terminal.firstElementChild.remove();
+    if (!terminal.childElementCount) terminal.textContent = 'Nenhuma saída ainda.';
+    else if (terminal.firstChild.nodeType === Node.TEXT_NODE) terminal.firstChild.remove();
+    if (noFim) terminal.scrollTop = terminal.scrollHeight;
+    ultimoIdTerminal = dados.ultimo_id;
+
+    document.getElementById('terminalBalancas').textContent = dados.balancas || '';
+    mostrarServico(dados.servico);
 }
 
 setInterval(atualizar, 1000);
 atualizar();
+setInterval(atualizarTerminal, 1000);
+atualizarTerminal();
 for (const id of ['peso', 'valor']) {
     document.getElementById(id).addEventListener('input', atualizarTipoRacao);
 }
