@@ -33,6 +33,10 @@ _STATUS_SERVICO = {"nome": SERVICO_SISTEMA, "disponivel": False}
 _INSTALADO = False
 _LEITURA_SERVICO_INICIADA = False
 
+#Registro de cada requisicao feita ao site pelo Flask (ex: o GET /api/status de cada segundo).
+#Continua aparecendo no terminal e no journal, so nao vai para o site.
+_ACESSO_FLASK = re.compile(r'werkzeug.*"(GET|POST|PUT|DELETE|HEAD|OPTIONS) \S+ HTTP/[\d.]+" \d{3}')
+
 _ERRO = re.compile(r"\b(ERROR|CRITICAL|Traceback|Exception|Erro|ERRO|Falha|failed|Failed)\b")
 _ALERTA = re.compile(r"\b(WARNING|Aviso|Atenção|Atencao)\b")
 
@@ -53,7 +57,7 @@ def _nivel(texto, prioridade=None):
 def adicionar_linha(texto, origem="terminal", hora=None, prioridade=None):
     global _PROXIMO_ID, _ULTIMA_BALANCA
     texto = texto.rstrip()
-    if not texto:
+    if not texto or _ACESSO_FLASK.search(texto):
         return
     hora = hora or time.strftime("%d/%m %H:%M:%S")
     with _LOCK:
