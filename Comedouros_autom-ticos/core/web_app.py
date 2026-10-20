@@ -12,6 +12,8 @@ from werkzeug.exceptions import HTTPException
 import RPi.GPIO as GPIO
 import numpy as np
 
+import logs_terminal
+logs_terminal.instalar() #antes do logging.basicConfig, para o logging tambem ir para o site
 import balanca as bl
 import leitor_fonkan as rfid
 import motor
@@ -70,7 +72,7 @@ CADASTRO_TEMPO_MAXIMO = 10 * 60
 CADASTRO_LOCK = threading.Lock()
 CADASTRO = {
     "estado": "inativo",       #inativo | aguardando_tag | tag_nova
-    "tag": None,               #tag nova esperando nome, peso e valor
+    "tag": None,               #tag nova esperando nome, peso e quantidade de racao
     "ultima_atividade": 0.0,
     "parar": None,             #threading.Event da sessao atual
 }
@@ -182,6 +184,12 @@ def concluir_calibracao(numero, leituras):
 @app.get("/api/status")
 def api_status():
     return jsonify(status_atual())
+
+
+@app.get("/api/terminal")
+def api_terminal():
+    """Saida do terminal da Raspberry e do servico do systemd, so as linhas depois de `desde`."""
+    return jsonify(logs_terminal.linhas_desde(request.args.get("desde", 0, type=int)))
 
 
 @app.post("/api/calibrar/<int:numero>")
@@ -313,14 +321,14 @@ def ler_tags_cadastradas():
         }
 
 
-def salvar_ovelha_csv(tag_id, nome, peso, valor):
+def salvar_ovelha_csv(tag_id, nome, peso, tipo, valor):
     caminho = caminho_tag_info()
     campos = ["tag_id", "tipo", "valor", "nome", "peso", "mestra"]
     with caminho.open("r", encoding="utf-8", newline="") as arquivo:
         registros = list(csv.DictReader(arquivo))
     registros.append({
         "tag_id": tag_id,
-        "tipo": "percentual",
+        "tipo": tipo,               #"fixo" = valor em kg | "percentual" = valor em % do peso
         "valor": valor,
         "nome": nome,
         "peso": peso,
@@ -383,7 +391,7 @@ def sessao_cadastro(parar):
             if parar.is_set():
                 return
             CADASTRO.update(estado="tag_nova", tag=tag, ultima_atividade=time.monotonic())
-        registrar_status(f"Tag nova reconhecida ({tag}). Digite o nome, o peso e o valor do animal.")
+        registrar_status(f"Tag nova reconhecida ({tag}). Digite o nome, o peso e a quantidade de ração do animal.")
 
 
 @app.post("/api/cadastro/iniciar")
@@ -410,9 +418,12 @@ def api_cadastro_salvar():
         peso = float(dados.get("peso", ""))
         valor = float(dados.get("valor", ""))
     except (TypeError, ValueError):
-        return jsonify(ok=False, erro="Peso e valor precisam ser números."), 400
+        return jsonify(ok=False, erro="Peso e quantidade de ração precisam ser números."), 400
+    tipo = str(dados.get("tipo", "fixo")).strip()
+    if tipo not in ("fixo", "percentual"):
+        return jsonify(ok=False, erro="Tipo de quantidade inválido."), 400
     if not nome or peso <= 0 or valor <= 0:
-        return jsonify(ok=False, erro="Informe o nome, e peso e valor maiores que zero."), 400
+        return jsonify(ok=False, erro="Informe o nome, e peso e quantidade de ração maiores que zero."), 400
 
     with CADASTRO_LOCK:
         if CADASTRO["estado"] != "tag_nova":
@@ -421,14 +432,14 @@ def api_cadastro_salvar():
         try:
             if tag in ler_tags_cadastradas():
                 raise ValueError(f"a tag {tag} já está cadastrada")
-            salvar_ovelha_csv(tag, nome, peso, valor)
+            salvar_ovelha_csv(tag, nome, peso, tipo, valor)
         except Exception as erro:
             registrar_status(f"Erro ao cadastrar {nome}: {erro}")
             return jsonify(ok=False, erro=str(erro)), 500
         CADASTRO.update(estado="aguardando_tag", tag=None, ultima_atividade=time.monotonic())
 
     registrar_status(
-        f"{nome} cadastrada (tag {tag}, {peso:g} kg, valor {valor:g}). "
+        f"{nome} cadastrada (tag {tag}, {peso:g} kg, ração {valor:g} {'% do peso' if tipo == 'percentual' else 'kg'}). "
         "Aproxime a próxima tag ou clique em Finalizar cadastro."
     )
     return jsonify(ok=True, tag=tag)
@@ -468,6 +479,7 @@ if __name__ == "__main__":
         registrar_status(f"Hardware não inicializado: {erro}")
 
     configurar_leitor_rfid(rfid.iniciar_leitor())
+    logs_terminal.iniciar_leitura_servico()
     threading.Thread(target=ler_balancas_continuamente, daemon=True).start()
 
     app.run(host="0.0.0.0", port=PORTA_SITE)

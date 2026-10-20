@@ -28,6 +28,10 @@ BOTAO_SOLTO = GPIO.LOW
 BOTAO_CALIBRAR1 = 24
 BOTAO_CALIBRAR2 = 32
 
+# --- SERVICO DO SYSTEMD ---
+#Nome do servico que roda a main.py na Raspberry; o site mostra o journal dele na area de logs
+SERVICO_SISTEMA = "novo_comedouro.service"
+
 # --- CONFIGURAÇÕES DO LEITOR RFID ---
 RFID_PORTA_SERIAL = "/dev/ttyUSB0"
 RFID_BAUDRATE = 38400

@@ -11,6 +11,21 @@ import notificacoes as nt
 import traceback
 from verificar_intervalo_alimentacao import verificar_intervalo_alimentacao
 
+
+def calcular_racao(tipo, valor, peso_animal):
+    """Kg de racao a despejar, ou None se o cadastro estiver invalido.
+    tipo "percentual": valor e a % do peso do animal (ex: 2 = 2% do peso).
+    Qualquer outro tipo ("fixo"): valor ja e a quantidade em kg."""
+    valor = pd.to_numeric(valor, errors='coerce')
+    if pd.isna(valor) or valor <= 0:
+        return None
+    if str(tipo).strip().lower() == 'percentual':
+        peso_animal = pd.to_numeric(peso_animal, errors='coerce')
+        if pd.isna(peso_animal) or peso_animal <= 0:
+            return None
+        return round(float((peso_animal) * float(valor) / 100)-5, 3) #alterado para diminuir 5 gramas por conta da queda de racao
+    return float(valor)
+
 class SistemaCocho:
     def __init__(self):
         self.leitor_rfid = None
@@ -150,21 +165,20 @@ class SistemaCocho:
                         ##TELEGRAM  ALERTA
                         nt.notificar_subida_animal(tag)
 
-                        peso_racao = pd.to_numeric(
-                            self.tag_info.loc[
-                                self.tag_info['tag_id'] == tag, 'valor'
-                            ].values[0],
-                            errors='coerce',
-                        )  # pega o peso da ração no .csv
-                        if pd.isna(peso_racao) or peso_racao <= 0:
+                        peso_animal_anterior = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'peso'].values[0]
+                        tipo_racao = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'tipo'].values[0]
+                        peso_racao = calcular_racao(
+                            tipo_racao,
+                            self.tag_info.loc[self.tag_info['tag_id'] == tag, 'valor'].values[0],
+                            peso_animal_anterior,
+                        )  # kg de ração a despejar
+                        if peso_racao is None:
                             print(
-                                f"Valor de racao invalido para a tag {tag}; "
-                                "ciclo cancelado."
+                                f"Quantidade de racao invalida para a tag {tag} "
+                                f"(tipo {tipo_racao}, peso {peso_animal_anterior}); ciclo cancelado."
                             )
                             sr.aguardar_sensor_livre('1')
                             return None
-                        peso_animal_anterior = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'peso'].values[0]
-                        tipo_racao = self.tag_info.loc[self.tag_info['tag_id'] == tag, 'tipo'].values[0]
 
                         print(f"tag encontrada, a vaquinha {nome_animal} vai comer {peso_racao}kg de ração hoje!")
 

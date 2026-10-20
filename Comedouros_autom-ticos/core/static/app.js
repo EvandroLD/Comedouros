@@ -107,14 +107,32 @@ async function salvarOvelha(evento) {
     const formulario = evento.target;
     const nome = document.getElementById('nome').value;
     const peso = document.getElementById('peso').value;
+    const tipo = document.getElementById('tipo').value;
     const valor = document.getElementById('valor').value;
     const botao = document.getElementById('btnSalvarOvelha');
-    const resposta = await post('/api/cadastro/salvar', { nome, peso, valor }, botao);
+    const resposta = await post('/api/cadastro/salvar', { nome, peso, tipo, valor }, botao);
     if (resposta.ok) {
         avisar(`${nome} cadastrada`);
         formulario.reset();
+        atualizarTipoRacao();
         atualizar();
     }
+}
+
+// Quantidade de Racao: fixa em kg ou porcentagem do peso do animal
+function atualizarTipoRacao() {
+    const percentual = document.getElementById('tipo').value === 'percentual';
+    const peso = parseFloat(document.getElementById('peso').value);
+    const valor = parseFloat(document.getElementById('valor').value);
+    document.getElementById('rotuloValor').textContent =
+        percentual ? 'Quantidade de Ração (% do peso)' : 'Quantidade de Ração (kg)';
+    let dica = percentual
+        ? 'Porcentagem do peso do animal, ex: 2 = 2% do peso. Acompanha o peso medido na balança.'
+        : 'Quantidade de ração por refeição, em kg.';
+    if (percentual && peso > 0 && valor > 0) {
+        dica += ` Hoje: ${(peso * valor / 100).toFixed(3)} kg.`;
+    }
+    document.getElementById('dicaRacao').textContent = dica;
 }
 
 let estadoCadastroAnterior = null;
@@ -127,14 +145,14 @@ function mostrarCadastro(cadastro) {
     card.dataset.estado = estado;
 
     const liberarCampos = estado === 'tag_nova';
-    for (const id of ['nome', 'peso', 'valor', 'btnSalvarOvelha']) {
+    for (const id of ['nome', 'peso', 'tipo', 'valor', 'btnSalvarOvelha']) {
         document.getElementById(id).disabled = !liberarCampos;
     }
 
     if (estado === 'aguardando_tag') {
         texto.textContent = 'Aguardando tag… Aproxime a tag do animal do leitor.';
     } else if (estado === 'tag_nova') {
-        texto.innerHTML = 'Tag nova reconhecida. Digite o nome, o peso e o valor.<br>';
+        texto.innerHTML = 'Tag nova reconhecida. Digite o nome, o peso e a quantidade de ração.<br>';
         const tag = document.createElement('span');
         tag.className = 'cadastro-tag';
         tag.textContent = cadastro.tag;
@@ -225,10 +243,69 @@ async function atualizar() {
     mostrarCalibracao(2, calibracao['2']);
 
     document.getElementById('situacao').textContent = status.mensagem;
-    document.getElementById('logs').textContent = status.logs.length
-        ? status.logs.join('\n')
-        : 'Nenhum evento ainda.';
+}
+
+// ---------- Terminal da Raspberry (prints, logging e journal do servico) ----------
+
+const LINHAS_TERMINAL = 500;
+let ultimoIdTerminal = 0;
+
+function linhaTerminal({ hora, origem, nivel, texto }) {
+    const linha = document.createElement('span');
+    linha.className = `linha-${origem} linha-${nivel}`;
+    const marcaHora = document.createElement('span');
+    marcaHora.className = 'linha-hora';
+    marcaHora.textContent = `${hora} `;
+    linha.append(marcaHora, `${origem === 'servico' ? '[serviço] ' : ''}${texto}\n`);
+    return linha;
+}
+
+function filtrarTerminal() {
+    const soServico = document.getElementById('terminalSoServico').checked;
+    document.getElementById('terminal').classList.toggle('so-servico', soServico);
+}
+
+function mostrarServico(servico) {
+    const texto = document.getElementById('servico');
+    if (!servico || !servico.disponivel) {
+        texto.textContent = `Serviço ${servico ? servico.nome : ''} não encontrado (o programa não está rodando pelo systemd?).`;
+        return;
+    }
+    const partes = [`${servico.nome}: ${servico.estado} (${servico.subestado})`];
+    if (servico.desde) partes.push(`desde ${servico.desde}`);
+    if (servico.pid && servico.pid !== '0') partes.push(`PID ${servico.pid}`);
+    if (servico.memoria_mb != null) partes.push(`${servico.memoria_mb} MB`);
+    if (servico.reinicios) partes.push(`${servico.reinicios} reinício(s)`);
+    texto.textContent = partes.join(' · ');
+}
+
+async function atualizarTerminal() {
+    let dados;
+    try {
+        const resposta = await fetch(`/api/terminal?desde=${ultimoIdTerminal}`);
+        dados = await resposta.json();
+    } catch (erro) {
+        return;
+    }
+    const terminal = document.getElementById('terminal');
+    // so rola sozinho se o usuario ja estava vendo o fim (nao atrapalha quem subiu para ler)
+    const noFim = terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight < 30;
+    if (dados.recomecar) terminal.replaceChildren();
+    for (const linha of dados.linhas) terminal.appendChild(linhaTerminal(linha));
+    while (terminal.childElementCount > LINHAS_TERMINAL) terminal.firstElementChild.remove();
+    if (!terminal.childElementCount) terminal.textContent = 'Nenhuma saída ainda.';
+    else if (terminal.firstChild.nodeType === Node.TEXT_NODE) terminal.firstChild.remove();
+    if (noFim) terminal.scrollTop = terminal.scrollHeight;
+    ultimoIdTerminal = dados.ultimo_id;
+
+    document.getElementById('terminalBalancas').textContent = dados.balancas || '';
+    mostrarServico(dados.servico);
 }
 
 setInterval(atualizar, 1000);
 atualizar();
+setInterval(atualizarTerminal, 1000);
+atualizarTerminal();
+for (const id of ['peso', 'valor']) {
+    document.getElementById(id).addEventListener('input', atualizarTipoRacao);
+}
