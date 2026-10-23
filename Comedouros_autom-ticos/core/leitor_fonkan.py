@@ -12,6 +12,23 @@ from config import (
 )
 
 
+#Funcoes chamadas com o tag_id sempre que uma tag e lida (ex: o site mostra o nome da ultima tag)
+_ao_ler_tag = []
+
+
+def ao_ler_tag(funcao):
+    """Registra uma funcao para ser chamada com o tag_id a cada tag lida por ler_tags()."""
+    _ao_ler_tag.append(funcao)
+
+
+def _avisar_tag_lida(tag_id):
+    for funcao in _ao_ler_tag:
+        try:
+            funcao(tag_id)
+        except Exception as e:
+            print(f"Erro ao avisar a leitura da tag {tag_id}: {e}")
+
+
 def normalizar_tag_id(tag_id):
     if tag_id is None:
         return None
@@ -84,6 +101,7 @@ def ler_tags(leitor, timeout=5, tags_ignoradas=TAGS_RFID_IGNORADAS, verbose=True
                         continue
                     if verbose:
                         print(f" Tag lida: {tag_id}")
+                    _avisar_tag_lida(tag_id)
                     return tag_id
             time.sleep(0.1)
             
@@ -245,9 +263,3 @@ if __name__ == "__main__":
 
         
         input("Pressione enter para voltar")
-            
-
-
-
-
-

@@ -66,16 +66,6 @@ async function cancelarCalibracao(numero, botao) {
     atualizar();
 }
 
-// Refaz a tara na hora, sem esperar a tara automatica do loop principal
-async function tarar(numero, botao) {
-    const texto = botao.textContent;
-    botao.textContent = 'Retarando…';
-    const resposta = await post(`/api/tarar/${numero}`, {}, botao);
-    botao.textContent = texto;
-    if (resposta.ok) avisar(`Balança ${numero} retarada`);
-    atualizar();
-}
-
 // calibracao: { estado: null | "aguardando_peso" | "lendo", etapa, pesos }
 function mostrarCalibracao(numero, calibracao) {
     const { estado = null, etapa = 0, pesos = [] } = calibracao || {};
@@ -213,6 +203,31 @@ function mostrarPeso(numero, peso, idade) {
     }
 }
 
+// ultimaTag: null | { tag, nome, cadastrada, hora, idade } (nome buscado no tag_info.csv)
+function mostrarUltimaTag(ultimaTag) {
+    const card = document.getElementById('cardTag');
+    const nome = document.getElementById('tagNome');
+    const id = document.getElementById('tagId');
+    const rodape = document.getElementById('tagRodape');
+
+    card.classList.remove('recente', 'desconhecida');
+    if (!ultimaTag) {
+        nome.textContent = '—';
+        id.textContent = '';
+        rodape.textContent = 'nenhuma tag lida ainda';
+        return;
+    }
+    if (!ultimaTag.cadastrada) {
+        card.classList.add('desconhecida');
+        nome.textContent = 'Tag não cadastrada';
+    } else {
+        nome.textContent = ultimaTag.nome || 'Sem nome no cadastro';
+    }
+    id.textContent = ultimaTag.tag;
+    if (ultimaTag.idade < 10) card.classList.add('recente');
+    rodape.textContent = ultimaTag.idade < 5 ? 'lida agora' : `lida às ${ultimaTag.hora}`;
+}
+
 // "parado" | "horario (150)" | "antihorario (255)"
 function mostrarMotor(numero, estado) {
     const pilula = document.getElementById(`motor${numero}`);
@@ -245,6 +260,7 @@ async function atualizar() {
 
     mostrarPeso(1, status.peso1, status.idade_peso1);
     mostrarPeso(2, status.peso2, status.idade_peso2);
+    mostrarUltimaTag(status.ultima_tag);
     mostrarMotor(1, status.motor1);
     mostrarMotor(2, status.motor2);
     mostrarCadastro(status.cadastro);
@@ -268,11 +284,6 @@ function linhaTerminal({ hora, origem, nivel, texto }) {
     marcaHora.textContent = `${hora} `;
     linha.append(marcaHora, `${origem === 'servico' ? '[serviço] ' : ''}${texto}\n`);
     return linha;
-}
-
-// Limpa so a tela: as proximas linhas continuam chegando a partir de ultimoIdTerminal
-function limparTerminal() {
-    document.getElementById('terminal').textContent = 'Nenhuma saída ainda.';
 }
 
 function filtrarTerminal() {
