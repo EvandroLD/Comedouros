@@ -42,6 +42,15 @@
                 <div class="peso-valor"><span id="peso2">—</span><span class="unidade">kg</span></div>
                 <div class="peso-rodape" id="idade2">aguardando leitura</div>
             </article>
+            <article class="peso-card tag-card" id="cardTag" aria-live="polite">
+                <div class="peso-cabecalho">
+                    <span class="peso-titulo">Última tag lida</span>
+                    <span class="etiqueta">RFID</span>
+                </div>
+                <div class="tag-nome" id="tagNome">—</div>
+                <div class="tag-id" id="tagId"></div>
+                <div class="peso-rodape" id="tagRodape">nenhuma tag lida ainda</div>
+            </article>
         </section>
 
         <div class="grade">
@@ -83,13 +92,6 @@
                     <div class="linha">
                         <button class="btn btn-secundario" id="btnCalibrar2" onclick="calibrar(2, this)">Calibrar balança 2</button>
                         <button class="btn btn-parar btn-cancelar-calibracao" id="btnCancelarCalibracao2" onclick="cancelarCalibracao(2, this)">Cancelar calibração</button>
-                    </div>
-                </div>
-                <div class="bloco">
-                    <p class="dica">Retarar agora: zera a balança com o que estiver em cima dela. Deixe-a vazia antes de clicar.</p>
-                    <div class="linha">
-                        <button class="btn btn-secundario" onclick="tarar(1, this)">Retarar balança 1</button>
-                        <button class="btn btn-secundario" onclick="tarar(2, this)">Retarar balança 2</button>
                     </div>
                 </div>
             </section>
@@ -139,13 +141,10 @@
             <section class="card card-larga">
                 <div class="terminal-cabecalho">
                     <h2>Situação</h2>
-                    <div class="terminal-acoes">
-                        <label class="terminal-opcao">
-                            <input type="checkbox" id="terminalSoServico" onchange="filtrarTerminal()">
-                            Só o serviço
-                        </label>
-                        <button class="btn btn-pequeno" onclick="limparTerminal()">Limpar console</button>
-                    </div>
+                    <label class="terminal-opcao">
+                        <input type="checkbox" id="terminalSoServico" onchange="filtrarTerminal()">
+                        Só o serviço
+                    </label>
                 </div>
                 <p id="situacao" class="situacao">Carregando…</p>
                 <p id="servico" class="dica">Carregando estado do serviço…</p>
