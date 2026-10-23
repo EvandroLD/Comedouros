@@ -78,6 +78,11 @@ CADASTRO = {
 }
 
 
+#Ultima tag lida pelo leitor RFID (no ciclo de alimentacao ou no cadastro), mostrada no site
+ULTIMA_TAG_LOCK = threading.Lock()
+ULTIMA_TAG = None  #{"tag", "nome", "cadastrada", "hora", "momento"}
+
+
 def registrar_status(mensagem):
     with STATUS_LOCK:
         STATUS["mensagem"] = mensagem
@@ -134,6 +139,17 @@ def status_atual():
         resultado["logs"] = list(LOGS)
     with CADASTRO_LOCK:
         resultado["cadastro"] = {"estado": CADASTRO["estado"], "tag": CADASTRO["tag"]}
+    with ULTIMA_TAG_LOCK:
+        if ULTIMA_TAG:
+            resultado["ultima_tag"] = {
+                "tag": ULTIMA_TAG["tag"],
+                "nome": ULTIMA_TAG["nome"],
+                "cadastrada": ULTIMA_TAG["cadastrada"],
+                "hora": ULTIMA_TAG["hora"],
+                "idade": time.monotonic() - ULTIMA_TAG["momento"],
+            }
+        else:
+            resultado["ultima_tag"] = None
     calibracao_em_andamento()  #cancela calibracoes esquecidas
     with CALIBRACAO_LOCK:
         resultado["calibracao"] = {
@@ -278,32 +294,6 @@ def api_calibrar_cancelar(numero):
     return jsonify(ok=True)
 
 
-@app.post("/api/tarar/<int:numero>")
-def api_tarar(numero):
-    """Refaz a tara da balanca na hora, sem esperar a tara automatica do loop (a cada 5 min)."""
-    if numero not in BALANCAS:
-        return jsonify(ok=False, erro="Balança inválida."), 400
-    with CALIBRACAO_LOCK:
-        if CALIBRACAO[numero]:
-            return jsonify(ok=False, erro=f"A balança {numero} está sendo calibrada. Termine ou cancele a calibração."), 409
-    with CADASTRO_LOCK:
-        cadastro_aberto = CADASTRO["estado"] != "inativo"
-    #o cadastro tambem trava o USO_COCHO, mas nao mexe na balanca; so o ciclo de alimentacao impede a tara
-    if not cadastro_aberto:
-        if not USO_COCHO.acquire(blocking=False):
-            return jsonify(ok=False, erro="Há um animal no cocho. Aguarde o fim da alimentação para retarar."), 409
-        USO_COCHO.release()
-    try:
-        with HARDWARE_LOCK:
-            tara = float(bl.retarar_balanca(numero))
-    except Exception as erro:
-        registrar_status(f"Erro ao retarar a balança {numero}: {erro}")
-        return jsonify(ok=False, erro=str(erro)), 500
-    bl.salvar_tara(numero, tara)
-    registrar_status(f"Balança {numero} retarada pelo site (tara {tara:.0f}).")
-    return jsonify(ok=True, tara=tara)
-
-
 @app.post("/api/motor/<int:numero>")
 def api_motor(numero):
     if numero not in (1, 2):
@@ -317,8 +307,15 @@ def api_motor(numero):
     except Exception as erro:
         registrar_status(f"Erro ao ligar o motor {numero}: {erro}")
         return jsonify(ok=False, erro=str(erro)), 500
+    threading.Thread(target=proteger_tempo_giro, args=(numero, velocidade), daemon=True).start()
     registrar_status(f"Motor {numero} ligado ({direcao}, velocidade {velocidade}).")
-    return jsonify(ok=True)
+    return jsonify(ok=True, tempo_maximo=motor.TEMPO_MAXIMO_GIRO)
+
+
+def proteger_tempo_giro(numero, velocidade):
+    """Motor ligado pelo site para sozinho depois de motor.TEMPO_MAXIMO_GIRO segundos."""
+    if motor.parar_motor(velocidade, numero):
+        registrar_status(f"Motor {numero} parado automaticamente após {motor.TEMPO_MAXIMO_GIRO} s.")
 
 
 @app.post("/api/motor/<int:numero>/parar")
@@ -345,6 +342,29 @@ def ler_tags_cadastradas():
             str(registro.get("tag_id", "")).strip().upper(): registro.get("nome", "")
             for registro in csv.DictReader(arquivo)
         }
+
+
+def registrar_tag_lida(tag):
+    """Chamada pelo leitor_fonkan a cada tag lida: busca o nome no tag_info.csv para o site."""
+    global ULTIMA_TAG
+    tag = rfid.normalizar_tag_id(tag)
+    try:
+        cadastradas = ler_tags_cadastradas()
+    except Exception as erro:
+        logging.warning("Erro ao ler o tag_info.csv para mostrar a tag %s: %s", tag, erro)
+        cadastradas = {}
+    nome = str(cadastradas.get(tag) or "").strip()
+    with ULTIMA_TAG_LOCK:
+        ULTIMA_TAG = {
+            "tag": tag,
+            "nome": nome,
+            "cadastrada": tag in cadastradas,
+            "hora": time.strftime("%H:%M:%S"),
+            "momento": time.monotonic(),
+        }
+
+
+rfid.ao_ler_tag(registrar_tag_lida)
 
 
 def salvar_ovelha_csv(tag_id, nome, peso, tipo, valor):
