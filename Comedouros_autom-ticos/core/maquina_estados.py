@@ -68,10 +68,16 @@ class SistemaCocho:
                     print(f"Falha ao recalibrar a balanca {num}: {erro}")
 
     def salvar_peso_animal(self, tag, peso):
-        if peso and peso > 0:
-            self.tag_info.loc[self.tag_info['tag_id'] == tag, 'peso'] = round(peso, 2)
-            self.tag_info.to_csv(TAG_INFO_CSV, index=False)
-            self.tag_info = pd.read_csv(TAG_INFO_CSV)
+        """
+        Substitui o peso do animal no tag_info.csv pela medição do ciclo (a mesma enviada ao Sheets).
+        Pesos -1 (medição descartada) e -2 (animal bloqueado) não são válidos: mantém o último peso válido.
+        """
+        if peso is None or pd.isna(peso) or peso <= 0:
+            print(f"peso {peso} inválido para a tag {tag}; mantendo o último peso válido")
+            return
+        self.tag_info = pd.read_csv(TAG_INFO_CSV) #relê para não sobrescrever um cadastro feito pelo site durante o ciclo
+        self.tag_info.loc[self.tag_info['tag_id'] == tag, 'peso'] = round(peso, 3)
+        self.tag_info.to_csv(TAG_INFO_CSV, index=False)
 
     def print_pesos_reais(self):
         peso1, bruto1 = bl.ler_peso(1)
@@ -217,7 +223,7 @@ class SistemaCocho:
 
                         if len(peso_animal_buffer) >= 3:
                             peso_animal_atual = np.median(peso_animal_buffer)
-                            if pd.notna(peso_animal_anterior) and abs(peso_animal_atual - peso_animal_anterior) / peso_animal_anterior > 0.20:
+                            if pd.notna(peso_animal_anterior) and peso_animal_anterior > 0 and abs(peso_animal_atual - peso_animal_anterior) / peso_animal_anterior > 0.20:
                                 print(f'peso medido {peso_animal_atual:.1f} desviou >20% de {peso_animal_anterior:.1f}, descartando')
                                 peso_animal_atual = -1
                         else:

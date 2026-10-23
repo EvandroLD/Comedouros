@@ -54,8 +54,8 @@ def rodar_ciclos(sistemaCocho):
                     sistemaCocho.relatorio_csv = pd.read_csv(LOCAL_RELATORIO_CSV)
                     rl.salvar_registro_csv(sistemaCocho.relatorio_csv, resposta)
 
-                    if resposta.get('peso_animal') > -1:
-                        sistemaCocho.salvar_peso_animal(resposta['tag_id'], resposta['peso_animal'])
+                    #substitui o peso do animal pela medição enviada ao Sheets (-1 e -2 mantêm o último peso válido)
+                    sistemaCocho.salvar_peso_animal(resposta['tag_id'], resposta.get('peso_animal'))
             finally:
                 web.USO_COCHO.release()
         else:
