@@ -11,8 +11,8 @@ def cadastrar_peso():
 
     tag_id = input("DIGITE O NUMERO DA TAG:").strip()
     peso_ovelha = float(input("DIGITE O VALOR DO PESO DA OVELHA: ").strip())
-    #CALCULA O PRECENTUAL COM BASE NO PESO DIGITADO PELO USUARIO
-    valor_comida = peso_ovelha * 0.2
+    #PORCENTAGEM DO PESO QUE O ANIMAL VAI COMER; A RAÇÃO EM KG É CALCULADA NO CICLO COM O PESO ATUAL DO CSV
+    valor_comida = float(input("DIGITE A PORCENTAGEM DO PESO EM RAÇÃO (EX: 2 = 2%): ").strip())
     nome = input("DIGITE O NOME DA OVELHA:").strip()
  
     
