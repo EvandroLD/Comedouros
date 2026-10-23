@@ -203,6 +203,31 @@ function mostrarPeso(numero, peso, idade) {
     }
 }
 
+// ultimaTag: null | { tag, nome, cadastrada, hora, idade } (nome buscado no tag_info.csv)
+function mostrarUltimaTag(ultimaTag) {
+    const card = document.getElementById('cardTag');
+    const nome = document.getElementById('tagNome');
+    const id = document.getElementById('tagId');
+    const rodape = document.getElementById('tagRodape');
+
+    card.classList.remove('recente', 'desconhecida');
+    if (!ultimaTag) {
+        nome.textContent = '—';
+        id.textContent = '';
+        rodape.textContent = 'nenhuma tag lida ainda';
+        return;
+    }
+    if (!ultimaTag.cadastrada) {
+        card.classList.add('desconhecida');
+        nome.textContent = 'Tag não cadastrada';
+    } else {
+        nome.textContent = ultimaTag.nome || 'Sem nome no cadastro';
+    }
+    id.textContent = ultimaTag.tag;
+    if (ultimaTag.idade < 10) card.classList.add('recente');
+    rodape.textContent = ultimaTag.idade < 5 ? 'lida agora' : `lida às ${ultimaTag.hora}`;
+}
+
 // "parado" | "horario (150)" | "antihorario (255)"
 function mostrarMotor(numero, estado) {
     const pilula = document.getElementById(`motor${numero}`);
@@ -235,6 +260,7 @@ async function atualizar() {
 
     mostrarPeso(1, status.peso1, status.idade_peso1);
     mostrarPeso(2, status.peso2, status.idade_peso2);
+    mostrarUltimaTag(status.ultima_tag);
     mostrarMotor(1, status.motor1);
     mostrarMotor(2, status.motor2);
     mostrarCadastro(status.cadastro);

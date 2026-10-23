@@ -78,6 +78,11 @@ CADASTRO = {
 }
 
 
+#Ultima tag lida pelo leitor RFID (no ciclo de alimentacao ou no cadastro), mostrada no site
+ULTIMA_TAG_LOCK = threading.Lock()
+ULTIMA_TAG = None  #{"tag", "nome", "cadastrada", "hora", "momento"}
+
+
 def registrar_status(mensagem):
     with STATUS_LOCK:
         STATUS["mensagem"] = mensagem
@@ -134,6 +139,17 @@ def status_atual():
         resultado["logs"] = list(LOGS)
     with CADASTRO_LOCK:
         resultado["cadastro"] = {"estado": CADASTRO["estado"], "tag": CADASTRO["tag"]}
+    with ULTIMA_TAG_LOCK:
+        if ULTIMA_TAG:
+            resultado["ultima_tag"] = {
+                "tag": ULTIMA_TAG["tag"],
+                "nome": ULTIMA_TAG["nome"],
+                "cadastrada": ULTIMA_TAG["cadastrada"],
+                "hora": ULTIMA_TAG["hora"],
+                "idade": time.monotonic() - ULTIMA_TAG["momento"],
+            }
+        else:
+            resultado["ultima_tag"] = None
     calibracao_em_andamento()  #cancela calibracoes esquecidas
     with CALIBRACAO_LOCK:
         resultado["calibracao"] = {
@@ -319,6 +335,29 @@ def ler_tags_cadastradas():
             str(registro.get("tag_id", "")).strip().upper(): registro.get("nome", "")
             for registro in csv.DictReader(arquivo)
         }
+
+
+def registrar_tag_lida(tag):
+    """Chamada pelo leitor_fonkan a cada tag lida: busca o nome no tag_info.csv para o site."""
+    global ULTIMA_TAG
+    tag = rfid.normalizar_tag_id(tag)
+    try:
+        cadastradas = ler_tags_cadastradas()
+    except Exception as erro:
+        logging.warning("Erro ao ler o tag_info.csv para mostrar a tag %s: %s", tag, erro)
+        cadastradas = {}
+    nome = str(cadastradas.get(tag) or "").strip()
+    with ULTIMA_TAG_LOCK:
+        ULTIMA_TAG = {
+            "tag": tag,
+            "nome": nome,
+            "cadastrada": tag in cadastradas,
+            "hora": time.strftime("%H:%M:%S"),
+            "momento": time.monotonic(),
+        }
+
+
+rfid.ao_ler_tag(registrar_tag_lida)
 
 
 def salvar_ovelha_csv(tag_id, nome, peso, tipo, valor):
