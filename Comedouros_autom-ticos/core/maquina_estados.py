@@ -23,7 +23,7 @@ def calcular_racao(tipo, valor, peso_animal):
         peso_animal = pd.to_numeric(peso_animal, errors='coerce')
         if pd.isna(peso_animal) or peso_animal <= 0:
             return None
-        return round(float((peso_animal) * float(valor) / 100)-5, 3) #alterado para diminuir 5 gramas por conta da queda de racao
+        return round(float((peso_animal) * float(valor) / 100)-0.005, 3) #alterado para diminuir 5 gramas por conta da queda de racao
     return float(valor)
 
 class SistemaCocho:

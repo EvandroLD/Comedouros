@@ -67,7 +67,7 @@ def notificar():
         enviados = rl.sincronizar_csv_com_sheets()
         if enviados:
             print(f"{enviados} registros novos enviados para o Google Sheets")
-        parar.wait(30)
+        parar.wait(300)
 
 def botao():
     estado1 = BOTAO_SOLTO
