@@ -37,7 +37,7 @@ async function post(url, data = {}, botao = null) {
 
 async function motor(numero, botao) {
     const resposta = await post(`/api/motor/${numero}`, {}, botao);
-    if (resposta.ok) avisar(`Motor ${numero} ligado (para sozinho em ${resposta.tempo_maximo} s)`);
+    if (resposta.ok) avisar(`Motor ${numero} ligado`);
     atualizar();
 }
 
@@ -94,10 +94,34 @@ async function iniciarCadastro(botao) {
     if (resposta.ok) atualizar();
 }
 
+function editandoOvelha() {
+    return document.getElementById('cardCadastro').dataset.estado === 'tag_cadastrada';
+}
+
+function limparFormulario() {
+    document.getElementById('formOvelha').reset();
+    atualizarTipoRacao();
+}
+
+// Editando um animal ja cadastrado, "Finalizar cadastro" salva o formulario (via salvarOvelha)
 async function finalizarCadastro(botao) {
+    if (editandoOvelha()) {
+        document.getElementById('formOvelha').requestSubmit();
+        return;
+    }
     const resposta = await post('/api/cadastro/finalizar', {}, botao);
     if (resposta.ok) {
-        document.getElementById('formOvelha').reset();
+        limparFormulario();
+        atualizar();
+    }
+}
+
+// Descarta a edicao em andamento e encerra o cadastro
+async function cancelarCadastro(botao) {
+    const resposta = await post('/api/cadastro/cancelar', {}, botao);
+    if (resposta.ok) {
+        limparFormulario();
+        avisar('Cadastro cancelado: nada foi alterado');
         atualizar();
     }
 }
@@ -109,6 +133,16 @@ async function salvarOvelha(evento) {
     const peso = document.getElementById('peso').value;
     const tipo = document.getElementById('tipo').value;
     const valor = document.getElementById('valor').value;
+    if (editandoOvelha()) {
+        const botao = document.getElementById('btnFinalizarCadastro');
+        const resposta = await post('/api/cadastro/finalizar', { nome, peso, tipo, valor }, botao);
+        if (resposta.ok) {
+            avisar(`Informações de ${nome} atualizadas`);
+            limparFormulario();
+            atualizar();
+        }
+        return;
+    }
     const botao = document.getElementById('btnSalvarOvelha');
     const resposta = await post('/api/cadastro/salvar', { nome, peso, tipo, valor }, botao);
     if (resposta.ok) {
@@ -136,15 +170,36 @@ function atualizarTipoRacao() {
 }
 
 let estadoCadastroAnterior = null;
+let tagCadastroAnterior = null;
 
-// estado: "inativo" | "aguardando_tag" | "tag_nova"
+// Coloca no formulario os valores salvos no tag_info.csv do animal ja cadastrado
+function preencherFormulario(dados) {
+    document.getElementById('nome').value = dados.nome || '';
+    document.getElementById('peso').value = dados.peso || '';
+    document.getElementById('tipo').value = dados.tipo === 'percentual' ? 'percentual' : 'fixo';
+    document.getElementById('valor').value = dados.valor || '';
+    atualizarTipoRacao();
+}
+
+// estado: "inativo" | "aguardando_tag" | "tag_nova" | "tag_cadastrada" (editando um animal ja cadastrado)
 function mostrarCadastro(cadastro) {
     const card = document.getElementById('cardCadastro');
     const texto = document.getElementById('cadastroTexto');
     const estado = cadastro ? cadastro.estado : 'inativo';
+    const tag = cadastro ? cadastro.tag : null;
     card.dataset.estado = estado;
 
-    const liberarCampos = estado === 'tag_nova';
+    const editando = estado === 'tag_cadastrada';
+    document.getElementById('tituloCadastro').textContent = editando ? 'Editar informações' : 'Cadastrar ovelha';
+
+    // preenche so ao entrar na edicao, para nao apagar o que a pessoa esta digitando a cada atualizacao
+    if (editando && (estadoCadastroAnterior !== 'tag_cadastrada' || tagCadastroAnterior !== tag)) {
+        preencherFormulario(cadastro.dados || {});
+    } else if (!editando && estadoCadastroAnterior === 'tag_cadastrada') {
+        limparFormulario();  // edicao encerrada (finalizada, cancelada ou por inatividade)
+    }
+
+    const liberarCampos = estado === 'tag_nova' || editando;
     for (const id of ['nome', 'peso', 'tipo', 'valor', 'btnSalvarOvelha']) {
         document.getElementById(id).disabled = !liberarCampos;
     }
@@ -157,15 +212,22 @@ function mostrarCadastro(cadastro) {
         tag.className = 'cadastro-tag';
         tag.textContent = cadastro.tag;
         texto.appendChild(tag);
+    } else if (editando) {
+        texto.innerHTML = 'Animal já cadastrado. Altere as informações e clique em Finalizar cadastro para salvar, ou em Cancelar cadastro para descartar.<br>';
+        const etiquetaTag = document.createElement('span');
+        etiquetaTag.className = 'cadastro-tag';
+        etiquetaTag.textContent = cadastro.tag;
+        texto.appendChild(etiquetaTag);
     } else {
         texto.textContent = 'Clique em Iniciar cadastro e aproxime a tag do leitor. A alimentação fica pausada durante o cadastro.';
     }
 
-    // leva o cursor para o Nome quando uma tag nova acaba de ser reconhecida
-    if (estado === 'tag_nova' && estadoCadastroAnterior !== 'tag_nova') {
+    // leva o cursor para o Nome quando uma tag (nova ou para editar) acaba de ser reconhecida
+    if ((estado === 'tag_nova' || editando) && estadoCadastroAnterior !== estado) {
         document.getElementById('nome').focus();
     }
     estadoCadastroAnterior = estado;
+    tagCadastroAnterior = tag;
 }
 
 async function reiniciar(botao) {
