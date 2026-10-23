@@ -37,7 +37,7 @@ async function post(url, data = {}, botao = null) {
 
 async function motor(numero, botao) {
     const resposta = await post(`/api/motor/${numero}`, {}, botao);
-    if (resposta.ok) avisar(`Motor ${numero} ligado`);
+    if (resposta.ok) avisar(`Motor ${numero} ligado (para sozinho em ${resposta.tempo_maximo} s)`);
     atualizar();
 }
 

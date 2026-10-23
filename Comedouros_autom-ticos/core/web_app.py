@@ -317,8 +317,15 @@ def api_motor(numero):
     except Exception as erro:
         registrar_status(f"Erro ao ligar o motor {numero}: {erro}")
         return jsonify(ok=False, erro=str(erro)), 500
+    threading.Thread(target=proteger_tempo_giro, args=(numero, velocidade), daemon=True).start()
     registrar_status(f"Motor {numero} ligado ({direcao}, velocidade {velocidade}).")
-    return jsonify(ok=True)
+    return jsonify(ok=True, tempo_maximo=motor.TEMPO_MAXIMO_GIRO)
+
+
+def proteger_tempo_giro(numero, velocidade):
+    """Motor ligado pelo site para sozinho depois de motor.TEMPO_MAXIMO_GIRO segundos."""
+    if motor.parar_motor(velocidade, numero):
+        registrar_status(f"Motor {numero} parado automaticamente após {motor.TEMPO_MAXIMO_GIRO} s.")
 
 
 @app.post("/api/motor/<int:numero>/parar")

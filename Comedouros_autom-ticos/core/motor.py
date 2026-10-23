@@ -117,25 +117,41 @@ def _limitar_velocidade(velocidade):
         return 255
     return velocidade
 
+TEMPO_MAXIMO_GIRO = 15
+_contagem_giro = {1: 0, 2: 0}
+
 #APÓS 15 SEGUNDOS DO MOTOR MOVENDO ELE É FORÇADO A PARAR
-def parar_motor(velocidade, motor_id):
+#Usada pelo site: chamar logo depois de _definir_estado_manual, numa thread.
+#Desliga so o comando manual que estava ativo na chamada; se antes disso ele for
+#parado, trocado (botao fisico) ou o site mandar girar de novo, nao faz nada.
+#Retorna True se precisou parar o motor.
+def parar_motor(velocidade, motor_id, tempo_maximo=TEMPO_MAXIMO_GIRO):
     if velocidade <= 0:
-        return
+        return False
+
+    with _motor_lock:
+        _contagem_giro[motor_id] += 1
+        minha_contagem = _contagem_giro[motor_id]
+        comando = _estado_manual[motor_id]
+
+    def comando_ainda_ativo():
+        return _contagem_giro[motor_id] == minha_contagem and _estado_manual[motor_id] == comando
 
     inicio_movimento = time.monotonic()
-    while time.monotonic() - inicio_movimento < 15:
+    while time.monotonic() - inicio_movimento < tempo_maximo:
         with _motor_lock:
-            _, velocidade_atual = _estado_manual[motor_id] or _estado_normal[motor_id]
-
-        if velocidade_atual <= 0:
-            return
+            if not comando_ainda_ativo():
+                return False
 
         time.sleep(0.1)
 
     with _motor_lock:
-        _estado_normal[motor_id] = ("parado", 0)
+        if not comando_ainda_ativo():
+            return False
+        #volta ao estado normal: se o ciclo de alimentacao estiver usando o motor, ele segue no controle
         _estado_manual[motor_id] = None
-        controlar_motor("parado", 0, motor_id)
+        _aplicar_estado_motor(motor_id)
+    return True
 
 
 
