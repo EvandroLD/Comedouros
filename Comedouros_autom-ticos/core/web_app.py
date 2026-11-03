@@ -71,8 +71,10 @@ LEITOR_RFID = None
 CADASTRO_TEMPO_MAXIMO = 10 * 60
 CADASTRO_LOCK = threading.Lock()
 CADASTRO = {
-    "estado": "inativo",       #inativo | aguardando_tag | tag_nova
-    "tag": None,               #tag nova esperando nome, peso e quantidade de racao
+    "estado": "inativo",       #inativo | aguardando_tag | tag_nova | tag_cadastrada
+    "tag": None,               #tag nova esperando os dados, ou tag cadastrada sendo editada
+    "dados": None,             #tag_cadastrada: nome, peso, tipo e valor salvos no tag_info.csv
+    "ignorar_tag": None,       #tag recem cadastrada: nao abre a edicao enquanto ela continua perto do leitor
     "ultima_atividade": 0.0,
     "parar": None,             #threading.Event da sessao atual
 }
@@ -138,7 +140,11 @@ def status_atual():
         resultado["motor2"] = estado_motor(2)
         resultado["logs"] = list(LOGS)
     with CADASTRO_LOCK:
-        resultado["cadastro"] = {"estado": CADASTRO["estado"], "tag": CADASTRO["tag"]}
+        resultado["cadastro"] = {
+            "estado": CADASTRO["estado"],
+            "tag": CADASTRO["tag"],
+            "dados": CADASTRO["dados"],
+        }
     with ULTIMA_TAG_LOCK:
         if ULTIMA_TAG:
             resultado["ultima_tag"] = {
@@ -333,15 +339,8 @@ def api_motor(numero):
     except Exception as erro:
         registrar_status(f"Erro ao ligar o motor {numero}: {erro}")
         return jsonify(ok=False, erro=str(erro)), 500
-    threading.Thread(target=proteger_tempo_giro, args=(numero, velocidade), daemon=True).start()
     registrar_status(f"Motor {numero} ligado ({direcao}, velocidade {velocidade}).")
-    return jsonify(ok=True, tempo_maximo=motor.TEMPO_MAXIMO_GIRO)
-
-
-def proteger_tempo_giro(numero, velocidade):
-    """Motor ligado pelo site para sozinho depois de motor.TEMPO_MAXIMO_GIRO segundos."""
-    if motor.parar_motor(velocidade, numero):
-        registrar_status(f"Motor {numero} parado automaticamente após {motor.TEMPO_MAXIMO_GIRO} s.")
+    return jsonify(ok=True)
 
 
 @app.post("/api/motor/<int:numero>/parar")
@@ -368,6 +367,41 @@ def ler_tags_cadastradas():
             str(registro.get("tag_id", "")).strip().upper(): registro.get("nome", "")
             for registro in csv.DictReader(arquivo)
         }
+
+
+def ler_dados_ovelha(tag):
+    """Nome, peso, tipo e valor da tag no tag_info.csv (como texto, para preencher o formulario)."""
+    with caminho_tag_info().open("r", encoding="utf-8", newline="") as arquivo:
+        for registro in csv.DictReader(arquivo):
+            if str(registro.get("tag_id", "")).strip().upper() == tag:
+                tipo = str(registro.get("tipo") or "").strip().lower()
+                return {
+                    "nome": str(registro.get("nome") or "").strip(),
+                    "peso": str(registro.get("peso") or "").strip(),
+                    "tipo": "percentual" if tipo == "percentual" else "fixo",
+                    "valor": str(registro.get("valor") or "").strip(),
+                }
+    return None
+
+
+def validar_dados_ovelha(dados):
+    """Retorna (nome, peso, tipo, valor) do formulario, ou levanta ValueError com a mensagem para o site."""
+    nome = str(dados.get("nome", "")).strip()
+    try:
+        peso = float(dados.get("peso", ""))
+        valor = float(dados.get("valor", ""))
+    except (TypeError, ValueError):
+        raise ValueError("Peso e quantidade de ração precisam ser números.")
+    tipo = str(dados.get("tipo", "fixo")).strip()
+    if tipo not in ("fixo", "percentual"):
+        raise ValueError("Tipo de quantidade inválido.")
+    if not nome or peso <= 0 or valor <= 0:
+        raise ValueError("Informe o nome, e peso e quantidade de ração maiores que zero.")
+    return nome, peso, tipo, valor
+
+
+def descrever_racao(tipo, valor):
+    return f"{valor:g} {'% do peso' if tipo == 'percentual' else 'kg'}"
 
 
 def registrar_tag_lida(tag):
@@ -412,21 +446,40 @@ def salvar_ovelha_csv(tag_id, nome, peso, tipo, valor):
         escritor.writerows(registros)
 
 
+def atualizar_ovelha_csv(tag_id, nome, peso, tipo, valor):
+    """Altera nome, peso, tipo e valor de uma tag ja cadastrada; as outras colunas (ex: mestra) ficam iguais."""
+    caminho = caminho_tag_info()
+    with caminho.open("r", encoding="utf-8", newline="") as arquivo:
+        leitor = csv.DictReader(arquivo)
+        campos = leitor.fieldnames or ["tag_id", "tipo", "valor", "nome", "peso", "mestra"]
+        registros = list(leitor)
+    encontrada = False
+    for registro in registros:
+        if str(registro.get("tag_id", "")).strip().upper() == tag_id:
+            registro.update(tipo=tipo, valor=valor, nome=nome, peso=peso)
+            encontrada = True
+    if not encontrada:
+        raise ValueError(f"a tag {tag_id} não está mais no tag_info.csv")
+    with caminho.open("w", encoding="utf-8", newline="") as arquivo:
+        escritor = csv.DictWriter(arquivo, fieldnames=campos, extrasaction="ignore")
+        escritor.writeheader()
+        escritor.writerows(registros)
+
+
 def encerrar_cadastro(mensagem):
     """Fecha a sessao de cadastro (uma unica vez) e libera o cocho para a alimentacao."""
     with CADASTRO_LOCK:
         if CADASTRO["estado"] == "inativo":
             return False
         CADASTRO["parar"].set()
-        CADASTRO.update(estado="inativo", tag=None, parar=None)
+        CADASTRO.update(estado="inativo", tag=None, dados=None, ignorar_tag=None, parar=None)
         USO_COCHO.release()
     registrar_status(mensagem)
     return True
 
 
 def sessao_cadastro(parar):
-    """Thread do cadastro: le tags ate achar uma nova, ou ate o cadastro ser finalizado."""
-    ultima_tag_avisada = None  #evita repetir o aviso enquanto a mesma tag fica perto do leitor
+    """Thread do cadastro: le tags ate achar uma (nova ou para editar), ou ate o cadastro ser finalizado."""
     while not parar.is_set():
         with CADASTRO_LOCK:
             estado = CADASTRO["estado"]
@@ -449,20 +502,32 @@ def sessao_cadastro(parar):
             parar.wait(2)
             continue
 
+        with CADASTRO_LOCK:
+            if tag == CADASTRO["ignorar_tag"]:
+                continue  #animal que acabou de ser cadastrado ainda perto do leitor
+            CADASTRO["ignorar_tag"] = None
+
         if tag in cadastradas:
-            if tag != ultima_tag_avisada:
-                registrar_status(
-                    f"Tag {tag} já cadastrada ({cadastradas[tag]}). "
-                    "Aproxime outra tag ou clique em Finalizar cadastro."
-                )
-                ultima_tag_avisada = tag
+            try:
+                dados = ler_dados_ovelha(tag)
+            except Exception as erro:
+                registrar_status(f"Erro ao ler os dados da tag {tag} no tag_info.csv: {erro}")
+                parar.wait(2)
+                continue
+            with CADASTRO_LOCK:
+                if parar.is_set():
+                    return
+                CADASTRO.update(estado="tag_cadastrada", tag=tag, dados=dados, ultima_atividade=time.monotonic())
+            registrar_status(
+                f"Tag {tag} já cadastrada ({dados['nome'] or 'sem nome'}). Altere as informações e clique em "
+                "Finalizar cadastro para salvar, ou em Cancelar cadastro para descartar."
+            )
             continue
 
-        ultima_tag_avisada = tag
         with CADASTRO_LOCK:
             if parar.is_set():
                 return
-            CADASTRO.update(estado="tag_nova", tag=tag, ultima_atividade=time.monotonic())
+            CADASTRO.update(estado="tag_nova", tag=tag, dados=None, ultima_atividade=time.monotonic())
         registrar_status(f"Tag nova reconhecida ({tag}). Digite o nome, o peso e a quantidade de ração do animal.")
 
 
@@ -476,7 +541,10 @@ def api_cadastro_iniciar():
         if not USO_COCHO.acquire(blocking=False):
             return jsonify(ok=False, erro="Há um animal no cocho. Aguarde o fim da alimentação para cadastrar."), 409
         parar = threading.Event()
-        CADASTRO.update(estado="aguardando_tag", tag=None, ultima_atividade=time.monotonic(), parar=parar)
+        CADASTRO.update(
+            estado="aguardando_tag", tag=None, dados=None, ignorar_tag=None,
+            ultima_atividade=time.monotonic(), parar=parar,
+        )
     registrar_status("Cadastro iniciado. Alimentação pausada. Aproxime a tag do animal do leitor.")
     threading.Thread(target=sessao_cadastro, args=(parar,), daemon=True).start()
     return jsonify(ok=True)
@@ -484,18 +552,10 @@ def api_cadastro_iniciar():
 
 @app.post("/api/cadastro/salvar")
 def api_cadastro_salvar():
-    dados = request.get_json(silent=True) or {}
-    nome = str(dados.get("nome", "")).strip()
     try:
-        peso = float(dados.get("peso", ""))
-        valor = float(dados.get("valor", ""))
-    except (TypeError, ValueError):
-        return jsonify(ok=False, erro="Peso e quantidade de ração precisam ser números."), 400
-    tipo = str(dados.get("tipo", "fixo")).strip()
-    if tipo not in ("fixo", "percentual"):
-        return jsonify(ok=False, erro="Tipo de quantidade inválido."), 400
-    if not nome or peso <= 0 or valor <= 0:
-        return jsonify(ok=False, erro="Informe o nome, e peso e quantidade de ração maiores que zero."), 400
+        nome, peso, tipo, valor = validar_dados_ovelha(request.get_json(silent=True) or {})
+    except ValueError as erro:
+        return jsonify(ok=False, erro=str(erro)), 400
 
     with CADASTRO_LOCK:
         if CADASTRO["estado"] != "tag_nova":
@@ -508,10 +568,10 @@ def api_cadastro_salvar():
         except Exception as erro:
             registrar_status(f"Erro ao cadastrar {nome}: {erro}")
             return jsonify(ok=False, erro=str(erro)), 500
-        CADASTRO.update(estado="aguardando_tag", tag=None, ultima_atividade=time.monotonic())
+        CADASTRO.update(estado="aguardando_tag", tag=None, ignorar_tag=tag, ultima_atividade=time.monotonic())
 
     registrar_status(
-        f"{nome} cadastrada (tag {tag}, {peso:g} kg, ração {valor:g} {'% do peso' if tipo == 'percentual' else 'kg'}). "
+        f"{nome} cadastrada (tag {tag}, {peso:g} kg, ração {descrever_racao(tipo, valor)}). "
         "Aproxime a próxima tag ou clique em Finalizar cadastro."
     )
     return jsonify(ok=True, tag=tag)
@@ -519,7 +579,46 @@ def api_cadastro_salvar():
 
 @app.post("/api/cadastro/finalizar")
 def api_cadastro_finalizar():
-    encerrar_cadastro("Cadastro finalizado. Alimentação retomada.")
+    """Encerra o cadastro. Editando uma tag ja cadastrada, salva antes as informacoes do formulario."""
+    with CADASTRO_LOCK:
+        editando = CADASTRO["estado"] == "tag_cadastrada"
+        tag = CADASTRO["tag"]
+    if not editando:
+        encerrar_cadastro("Cadastro finalizado. Alimentação retomada.")
+        return jsonify(ok=True)
+
+    try:
+        nome, peso, tipo, valor = validar_dados_ovelha(request.get_json(silent=True) or {})
+    except ValueError as erro:
+        return jsonify(ok=False, erro=str(erro)), 400
+
+    with CADASTRO_LOCK:
+        if CADASTRO["estado"] != "tag_cadastrada" or CADASTRO["tag"] != tag:
+            return jsonify(ok=False, erro="A edição foi encerrada antes de salvar. Inicie o cadastro de novo."), 409
+        try:
+            atualizar_ovelha_csv(tag, nome, peso, tipo, valor)
+        except Exception as erro:
+            registrar_status(f"Erro ao atualizar {nome}: {erro}")
+            return jsonify(ok=False, erro=str(erro)), 500
+
+    encerrar_cadastro(
+        f"Informações de {nome} atualizadas (tag {tag}, {peso:g} kg, ração {descrever_racao(tipo, valor)}). "
+        "Cadastro finalizado. Alimentação retomada."
+    )
+    return jsonify(ok=True, editada=True)
+
+
+@app.post("/api/cadastro/cancelar")
+def api_cadastro_cancelar():
+    """Encerra o cadastro sem salvar a edicao em andamento."""
+    with CADASTRO_LOCK:
+        dados = CADASTRO["dados"] if CADASTRO["estado"] == "tag_cadastrada" else None
+        tag = CADASTRO["tag"]
+    if dados:
+        mensagem = f"Edição cancelada: as informações de {dados['nome'] or tag} não foram alteradas."
+    else:
+        mensagem = "Cadastro cancelado."
+    encerrar_cadastro(f"{mensagem} Alimentação retomada.")
     return jsonify(ok=True)
 
 
